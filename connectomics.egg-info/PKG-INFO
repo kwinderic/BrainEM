@@ -1,0 +1,23 @@
+Metadata-Version: 2.1
+Name: connectomics
+Version: 0.1
+Summary: Semantic and instance segmentation toolbox for EM connectomics
+Home-page: https://github.com/zudi-lin/pytorch_connectomics
+Author: PyTorch Connectomics Contributors
+License: MIT
+License-File: LICENSE
+Requires-Dist: jupyter>=1.0
+Requires-Dist: scipy>=1.5
+Requires-Dist: scikit-learn>=0.23.1
+Requires-Dist: scikit-image>=0.17.2
+Requires-Dist: opencv-python>=4.3.0
+Requires-Dist: matplotlib>=3.3.0
+Requires-Dist: Cython==0.29.21
+Requires-Dist: yacs>=0.1.8
+Requires-Dist: h5py>=2.10.0
+Requires-Dist: gputil>=1.4.0
+Requires-Dist: imageio>=2.9.0
+Requires-Dist: tensorboard>=2.2.2
+Requires-Dist: einops>=0.3.0
+Requires-Dist: tqdm>=4.58.0
+Requires-Dist: monai>=0.9.1

@@ -1,0 +1,42 @@
+SYSTEM:
+  # NUM_GPUS: 2
+  # NUM_CPUS: 4
+  NUM_GPUS: 1
+  NUM_CPUS: 4
+SOLVER:
+  NAME: Adam
+  LR_SCHEDULER_NAME: WarmupCosineLR
+  BASE_LR: 0.0001
+  ITERATION_STEP: 1
+  ITERATION_SAVE: 10000
+  ITERATION_TOTAL: 100000     # ~ 200k x 2 x 1GPU
+  # ITERATION_VAL: 500000000000000000000000000000000000000000000
+  ITERATION_VAL: 10000
+  SAMPLES_PER_BATCH: 1
+MODEL:
+  ARCHITECTURE: affinity_knet
+  WITH_AFFINITY: True
+  BLOCK_TYPE: residual
+  # TARGET_OPT: ["2", "9-32"]   # affinity use 3 channels (by default), DCL use 32
+  TARGET_OPT: ["9-1", "2"]     # 9: original label, 2: affinity
+  LOSS_WEIGHT: [[1.0, 0.5], [1.0]]
+  WEIGHT_OPT: [["1", "0"], ["0"]]
+  OUTPUT_ACT: [["none", "sigmoid"], ["sigmoid"]]
+  # FILTERS: [32, 64, 96, 128, 160]
+  FILTERS: [64, 96, 128, 160, 184]
+DATASET:
+  INPUT_PATH: datasets/cremi/   # or your own dataset path
+  IMAGE_NAME: sample_A_train_inputs.h5@sample_B_train_inputs.h5@sample_C_train_inputs.h5
+  LABEL_NAME: sample_A_train_labels.h5@sample_B_train_labels.h5@sample_C_train_labels.h5
+  VAL_IMAGE_NAME: sample_A_test_inputs.h5
+  VAL_LABEL_NAME: sample_A_test_labels.h5
+  OUTPUT_PATH: outputs/cremi/affinity_knet
+  PAD_SIZE: [4, 64, 64]
+INFERENCE:
+  OUTPUT_ACT: ["sigmoid", "sigmoid"]
+  OUTPUT_PATH: outputs/cremi/affinity_knet/test
+  INPUT_SIZE: [17, 257, 257]
+  OUTPUT_SIZE: [17, 257, 257]
+
+# self.crop_size = [18, 160, 160]
+# self.net_padding = [0, 0, 0]

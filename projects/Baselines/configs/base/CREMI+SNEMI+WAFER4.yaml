@@ -1,0 +1,67 @@
+# All other configurations are set by default. If you want to add new config options,
+# please modify ../connectomics/config/defaults.py
+MONITOR:
+  WANDB_PROJECT: "LDINO"
+  ITERATION_NUM: [200, 1000]
+SYSTEM:
+  NUM_GPUS: 1
+  NUM_CPUS: 4
+  # NUM_GPUS: 8
+  # NUM_CPUS: 32
+  # NUM_GPUS: 2
+  # NUM_CPUS: 8
+AUGMENTOR:
+  SMOOTH: False
+MODEL:
+  INPUT_SIZE: [17, 257, 257]
+  OUTPUT_SIZE: [17, 257, 257]
+  IN_PLANES: 1
+  OUT_PLANES: 3
+  TARGET_OPT: ["2"]
+  LABEL_EROSION: 1
+  LOSS_OPTION: [["WeightedBCEWithLogitsLoss", "DiceLoss"]]
+  LOSS_WEIGHT: [[1.0, 0.5]]
+  WEIGHT_OPT: [["1", "0"]]
+  OUTPUT_ACT: [["none", "sigmoid"]]
+  FILTERS: [32, 64, 96, 128, 160]
+  NORM_MODE: gn
+DATASET:
+  INPUT_PATH: datasets/   # or your own dataset path
+  OUTPUT_PATH: outputs/
+  IMAGE_NAME: AC3-AC4/AC4_train_inputs.h5@cremi/sample_A_train_inputs.h5@cremi/sample_B_train_inputs.h5@cremi/sample_C_train_inputs.h5@wafer4/wafer4_inputs_train.h5
+  LABEL_NAME: AC3-AC4/AC4_train_labels.h5@cremi/sample_A_train_labels.h5@cremi/sample_B_train_labels.h5@cremi/sample_C_train_labels.h5@wafer4/wafer4_labels_train.h5
+  VAL_IMAGE_NAME: AC3-AC4/AC4_val_inputs.h5@cremi/sample_A_test_inputs.h5@cremi/sample_B_test_inputs.h5@cremi/sample_C_test_inputs.h5@wafer4/wafer4_inputs_test.h5
+  VAL_LABEL_NAME: AC3-AC4/AC4_val_labels.h5@cremi/sample_A_test_labels.h5@cremi/sample_B_test_inputs.h5@cremi/sample_C_test_inputs.h5@wafer4/wafer4_labels_test.h5
+  PAD_SIZE: [4, 64, 64]
+# SOLVER:
+#   LR_SCHEDULER_NAME: WarmupCosineLR
+#   BASE_LR: 0.02
+#   ITERATION_STEP: 1
+#   ITERATION_SAVE: 10000
+#   ITERATION_TOTAL: 150000
+#   SAMPLES_PER_BATCH: 2
+SOLVER:
+  NAME: Adam
+  LR_SCHEDULER_NAME: WarmupCosineLR
+  BASE_LR: 0.0001
+  ITERATION_STEP: 1
+  ITERATION_SAVE: 10000
+  ITERATION_TOTAL: 100000     # ~ 200k x 2 x 1GPU
+  # ITERATION_VAL: 500000000000000000000000000000000000000000000
+  ITERATION_VAL: 10000
+  SAMPLES_PER_BATCH: 2
+INFERENCE:
+  # INPUT_SIZE: [17, 513, 513]
+  # OUTPUT_SIZE: [17, 513, 513]
+  INPUT_SIZE: [17, 257, 257]
+  OUTPUT_SIZE: [17, 257, 257]
+  OUTPUT_ACT: ["sigmoid"]
+  IMAGE_NAME: sample_A_test_inputs.h5
+  OUTPUT_PATH: outputs/cremi/test
+  OUTPUT_NAME: result.h5
+  PAD_SIZE: [4, 32, 32]
+  AUG_MODE: min
+  AUG_NUM: None
+  # STRIDE: [8, 256, 256]
+  STRIDE: [8, 128, 128]
+  SAMPLES_PER_BATCH: 1

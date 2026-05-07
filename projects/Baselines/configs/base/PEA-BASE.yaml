@@ -1,0 +1,49 @@
+# PEA (Pixel Embedded Affinity) model config
+# PEA computes loss internally (SCM + CCM + EPM), so LOSS_OPTION etc.
+# are only needed for the framework Criterion to build without error.
+SYSTEM:
+  NUM_GPUS: 1
+  NUM_CPUS: 4
+SOLVER:
+  NAME: Adam
+  LR_SCHEDULER_NAME: WarmupCosineLR
+  BASE_LR: 0.0001
+  WEIGHT_DECAY: 1.0e-6
+  ADAM_EPS: 0.01
+  AMSGRAD: True
+  ITERATION_STEP: 1
+  ITERATION_SAVE: 10000
+  ITERATION_TOTAL: 100000
+  ITERATION_VAL: 10000
+  SAMPLES_PER_BATCH: 1
+MODEL:
+  ARCHITECTURE: 'pea'
+  # BLOCK_TYPE: not used by PEA
+  FILTERS: [28, 36, 48, 64, 80]
+  # BLOCKS: not used by PEA
+  INPUT_SIZE: [18, 160, 160]
+  OUTPUT_SIZE: [18, 160, 160]
+  OUT_PLANES: 12
+  IN_PLANES: 1
+  # 4 multi-scale affinity targets -> DataLoader produces List[4 x Tensor[B,3,D,H,W]]
+  TARGET_OPT: ["2-1-1-1-v1", "2-2-3-3-v1", "2-3-9-9-v1", "2-4-27-27-v1"]
+  # Framework Criterion config (PEA ignores these, uses internal WeightedMSE)
+  LOSS_OPTION: [["WeightedMSE"], ["WeightedMSE"], ["WeightedMSE"], ["WeightedMSE"]]
+  LOSS_WEIGHT: [[1.0], [1.0], [1.0], [1.0]]
+  WEIGHT_OPT:  [["1"], ["1"], ["1"], ["1"]]
+  OUTPUT_ACT:  [["none"], ["none"], ["none"], ["none"]]
+DATASET:
+  OUTPUT_PATH: outputs/SNEMI_PEA
+  PAD_SIZE: [0, 0, 0]
+INFERENCE:
+  OUTPUT_PATH: outputs/SNEMI_PEA/test
+  INPUT_SIZE: [18, 160, 160]
+  OUTPUT_SIZE: [18, 160, 160]
+  STRIDE: [10, 80, 80]
+  PAD_SIZE: [4, 48, 48]
+  OUTPUT_NAME: result.h5
+  OUTPUT_ACT:  ["none", "none", "none", "none"]
+MONITOR:
+  WANDB_PROJECT: "Baselines"
+  # PEA returns 16-ch embedding (not 12-ch affinity), framework visualization would crash.
+  ITERATION_NUM: [1000000, 1000000]

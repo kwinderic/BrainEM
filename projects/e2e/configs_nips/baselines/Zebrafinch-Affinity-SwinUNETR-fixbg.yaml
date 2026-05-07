@@ -1,0 +1,50 @@
+MODEL:
+  ARCHITECTURE: swinunetr
+  LABEL_EROSION: 1
+  # INPUT_SIZE: [65, 129, 129]
+  # OUTPUT_SIZE: [65, 129, 129]
+  INPUT_SIZE: [64, 128, 128]    # Must be divisible by patch size (16, 16, 16)
+  OUTPUT_SIZE: [64, 128, 128]
+  DEPTHS: (2, 2, 2, 2)
+  SWIN_UNETR_NUM_HEADS: (3, 6, 12, 24)
+  SWIN_UNETR_FEATURE_SIZE: 48
+  NORM_NAME: 'instance'
+  SWIN_UNETR_DROPOUT_RATE: 0.0
+  ATTN_DROP_RATE: 0.0
+  DROPOUT_PATH_RATE:  0.0
+  NORMALIZE: True
+  USE_CHECKPOINT: False
+  SPATIAL_DIMS: 3
+  DOWNSAMPLE: 'merging'
+SOLVER:
+  LR_SCHEDULER_NAME: WarmupCosineLR
+  NAME: AdamW
+  BASE_LR: 0.001
+  ITERATION_STEP: 1
+  ITERATION_SAVE: 10000
+  ITERATION_TOTAL: 100000     # ~ 200k x 2 x 1GPU
+  ITERATION_VAL: 10000
+  # ITERATION_VAL: 10000
+  SAMPLES_PER_BATCH: 1
+DATASET:
+# --------------------------------------
+  INPUT_PATH: datasets/nips/zebrafinch/train_processed_fixbg
+  IMAGE_NAME: img_train_subset.txt
+  LABEL_NAME: seg_train_subset.txt
+  VAL_IMAGE_NAME: img_val_subset.txt
+  VAL_LABEL_NAME: seg_val_subset.txt
+  OUTPUT_PATH: outputs/Zebrafinch_UNet
+  IS_ABSOLUTE_PATH: False
+  PAD_SIZE: [16, 32, 32]
+INFERENCE:
+  OUTPUT_PATH: outputs/Zebrafinch_UNet/test
+  INPUT_PATH: datasets/nips/zebrafinch/train_processed_fixbg
+  IMAGE_NAME: img_val_subset.txt
+  OUTPUT_NAME: result.h5
+  # STRIDE: [16, 128, 128]
+  STRIDE: [32, 64, 64]
+  # INPUT_SIZE: [65, 129, 129]
+  # OUTPUT_SIZE: [65, 129, 129]
+  INPUT_SIZE: [64, 128, 128]
+  OUTPUT_SIZE: [64, 128, 128]
+  PAD_SIZE: [16, 32, 32]

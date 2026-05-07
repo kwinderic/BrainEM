@@ -1,0 +1,91 @@
+SYSTEM:
+  # NUM_GPUS: 2
+  # NUM_CPUS: 4
+  NUM_GPUS: 2
+  NUM_CPUS: 4
+SOLVER:
+  NAME: Adam
+  LR_SCHEDULER_NAME: WarmupCosineLR
+  BASE_LR: 0.0001
+  ITERATION_STEP: 1
+  ITERATION_SAVE: 10000
+  ITERATION_TOTAL: 100000     # ~ 200k x 2 x 1GPU
+  ITERATION_VAL: 500000000000000000000000000000000000000000000
+  # ITERATION_VAL: 10000
+  SAMPLES_PER_BATCH: 1
+MODEL:
+# --------------------------------------
+# LSD use (84, 268, 268) for training, (96, 484, 484) for inference
+  # INPUT_SIZE: [32, 214, 214]
+  # OUTPUT_SIZE: [32, 214, 214]
+  INPUT_SIZE: [76, 150, 150]
+  OUTPUT_SIZE: [76, 150, 150]
+# default setting in configs/Zebrafinch
+  # INPUT_SIZE: [33, 97, 97]
+  # OUTPUT_SIZE: [33, 97, 97]
+# --------------------------------------
+  ARCHITECTURE: affinity_knet
+  WITH_AFFINITY: True
+  BLOCK_TYPE: residual
+  # TARGET_OPT: ["2", "9-32"]   # affinity use 3 channels (by default), DCL use 32
+  TARGET_OPT: ["9-1", "2"]     # 9: original label, 2: affinity
+  LOSS_WEIGHT: [[1.0, 0.5], [1.0]]
+  WEIGHT_OPT: [["1", "0"], ["0"]]
+  OUTPUT_ACT: [["none", "sigmoid"], ["sigmoid"]]
+AUGMENTOR:    # To avoid resize
+  RESCALE: 
+    ENABLED: False
+  ELASTIC: 
+    ENABLED: False
+  MISSINGSECTION:
+    ENABLED: False
+  MISALIGNMENT:
+    ENABLED: False
+DATASET:
+# --------------------------------------
+  INPUT_PATH: datasets/nips/zebrafinch/train_processed
+  IMAGE_NAME: img_train_subset.txt
+  LABEL_NAME: seg_train_subset.txt
+  VAL_IMAGE_NAME: img_val_subset.txt
+  VAL_LABEL_NAME: seg_val_subset.txt
+  OUTPUT_PATH: outputs/Zebrafinch/
+  IS_ABSOLUTE_PATH: False
+  PAD_SIZE: [16, 32, 32]
+  DISTRIBUTED: True
+  REJECT_SAMPLING:
+    DIVERSITY: 3
+  DATA_CHUNK_NUM: [20, 7, 8] # only for inference
+# --------------------------------------
+  # VAL_IMAGE_NAME: AC4_val_inputs.h5
+  # VAL_LABEL_NAME: AC4_val_labels.h5
+  # OUTPUT_PATH: outputs/AC3-AC4/res_unet
+  # PAD_SIZE: [4, 64, 64]
+INFERENCE:
+  OUTPUT_ACT: ["sigmoid", "sigmoid"]
+  # OUTPUT_PATH: outputs/AC3-AC4/res_unet/test
+#---------------------------------------------
+  # INPUT_SIZE: [33, 257, 257]
+  # OUTPUT_SIZE: [33, 257, 257]
+  IS_ABSOLUTE_PATH: False
+  DO_CHUNK_TITLE: 1
+  INPUT_PATH: datasets/nips/zebrafinch/train_processed
+  IMAGE_NAME: img_val_subset.txt
+  OUTPUT_PATH: outputs/Zebrafinch/val_subset
+  OUTPUT_NAME: result.h5
+  SAMPLES_PER_BATCH: 4
+#---------------------------------------------
+  INPUT_SIZE: [76, 150, 150]
+  OUTPUT_SIZE: [76, 150, 150]
+  STRIDE: [75, 150, 150]
+  # INPUT_SIZE: [17, 257, 257]
+  # OUTPUT_SIZE: [17, 257, 257]
+  # IMAGE_NAME: AC3_inputs.h5      # or path to your test images
+  # OUTPUT_NAME: result.h5
+  PAD_SIZE: [16, 32, 32]
+  AUG_MODE: min
+  AUG_NUM: None
+  # STRIDE: [8, 256, 256]
+  SAMPLES_PER_BATCH: 4
+
+# self.crop_size = [18, 160, 160]
+# self.net_padding = [0, 0, 0]

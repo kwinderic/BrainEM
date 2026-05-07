@@ -1,0 +1,35 @@
+MODEL:
+  ARCHITECTURE: unet_3d
+  BLOCK_TYPE: residual_se
+  LABEL_EROSION: 1
+  INPUT_SIZE: [65, 129, 129]
+  OUTPUT_SIZE: [65, 129, 129]
+SOLVER:
+  NAME: Adam
+  LR_SCHEDULER_NAME: WarmupCosineLR
+  BASE_LR: 0.0001
+  ITERATION_STEP: 1
+  ITERATION_SAVE: 10000
+  ITERATION_TOTAL: 100000     # ~ 200k x 2 x 1GPU
+  ITERATION_VAL: 10000
+  # ITERATION_VAL: 10000
+  SAMPLES_PER_BATCH: 1
+DATASET:
+# --------------------------------------
+  INPUT_PATH: datasets/nips/zebrafinch/train_processed
+  IMAGE_NAME: img_train_subset.txt
+  LABEL_NAME: seg_train_subset.txt
+  VAL_IMAGE_NAME: img_val_subset.txt
+  VAL_LABEL_NAME: seg_val_subset.txt
+  OUTPUT_PATH: outputs/Zebrafinch_UNet
+  IS_ABSOLUTE_PATH: False
+  PAD_SIZE: [16, 32, 32]
+INFERENCE:
+  OUTPUT_PATH: outputs/Zebrafinch_UNet/test
+  INPUT_PATH: datasets/nips/zebrafinch/train_processed
+  IMAGE_NAME: img_val_subset.txt
+  OUTPUT_NAME: result.h5
+  STRIDE: [16, 128, 128]
+  INPUT_SIZE: [65, 129, 129]
+  OUTPUT_SIZE: [65, 129, 129]
+  PAD_SIZE: [16, 32, 32]

@@ -1,0 +1,5 @@
+tensorflow==2.13.0
+setuptools==59.5.0
+fvcore
+mahotas==1.4.13
+pillow==9.5.0    # avoid AttributeError: module 'PIL.Image' has no attribute 'ANTIALIAS'

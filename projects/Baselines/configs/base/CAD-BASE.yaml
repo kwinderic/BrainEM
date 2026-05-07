@@ -1,0 +1,58 @@
+# CAD (Co-detection of Affinities and Densities) config
+# 2D dual-stream U-Net + 3D U-Net jointly trained with cross-attention and interaction losses.
+# CAD computes loss internally, so LOSS_OPTION etc. are only needed for framework Criterion to build.
+SYSTEM:
+  NUM_GPUS: 1
+  NUM_CPUS: 4
+SOLVER:
+  NAME: Adam
+  LR_SCHEDULER_NAME: WarmupCosineLR
+  BASE_LR: 0.0001
+  WEIGHT_DECAY: 1.0e-6
+  ADAM_EPS: 0.01
+  AMSGRAD: True
+  ITERATION_STEP: 1
+  ITERATION_SAVE: 10000
+  ITERATION_TOTAL: 200000
+  ITERATION_VAL: 10000
+  SAMPLES_PER_BATCH: 2
+MODEL:
+  ARCHITECTURE: 'cad'
+  FILTERS: [28, 36, 48, 64, 80]
+  INPUT_SIZE: [18, 160, 160]
+  OUTPUT_SIZE: [18, 160, 160]
+  OUT_PLANES: 12
+  IN_PLANES: 1
+  # 4 multi-scale affinity targets (same as PEA)
+  TARGET_OPT: ["2-1-1-1-v1", "2-2-3-3-v1", "2-3-9-9-v1", "2-4-27-27-v1"]
+  # Framework Criterion config (CAD ignores these, uses internal WeightedMSE)
+  LOSS_OPTION: [["WeightedMSE"], ["WeightedMSE"], ["WeightedMSE"], ["WeightedMSE"]]
+  LOSS_WEIGHT: [[1.0], [1.0], [1.0], [1.0]]
+  WEIGHT_OPT:  [["1"], ["1"], ["1"], ["1"]]
+  OUTPUT_ACT:  [["none"], ["none"], ["none"], ["none"]]
+  # CAD-specific
+  CAD_EMBEDDING_DIM: 16
+  CAD_FILTER_CHANNEL_2D: 16
+  CAD_START_FT: 10000
+  CAD_FT_LR_RATIO: 1.0
+  CAD_AFFS0_WEIGHT_3D: 10.0
+  CAD_AFFS0_WEIGHT_2D: 1.0
+  CAD_LOSS_WEIGHT_3D: 1.0
+  CAD_LOSS_WEIGHT_2D_SLICE: 1.0
+  CAD_LOSS_WEIGHT_CROSS: 1.0
+  CAD_LOSS_WEIGHT_INTERACT: 1.0
+DATASET:
+  OUTPUT_PATH: outputs/CAD
+  PAD_SIZE: [0, 0, 0]
+INFERENCE:
+  OUTPUT_PATH: outputs/CAD/test
+  INPUT_SIZE: [18, 160, 160]
+  OUTPUT_SIZE: [18, 160, 160]
+  STRIDE: [10, 80, 80]
+  PAD_SIZE: [4, 48, 48]
+  OUTPUT_NAME: result.h5
+  OUTPUT_ACT: ["none", "none", "none", "none"]
+MONITOR:
+  WANDB_PROJECT: "Baselines"
+  # CAD visualization not yet supported via framework
+  ITERATION_NUM: [1000000, 1000000]

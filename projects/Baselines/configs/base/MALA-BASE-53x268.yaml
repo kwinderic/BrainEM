@@ -1,0 +1,33 @@
+SYSTEM:
+  NUM_GPUS: 1
+  NUM_CPUS: 4
+SOLVER:
+  NAME: Adam  # 原作: Adam, lr=0.5e-4, beta1=0.95, beta2=0.999, eps=1e-8
+  LR_SCHEDULER_NAME: WarmupCosineLR
+  BASE_LR: 0.0001
+  ITERATION_STEP: 1
+  ITERATION_SAVE: 10000
+  ITERATION_TOTAL: 100000
+  ITERATION_VAL: 10000
+  SAMPLES_PER_BATCH: 2
+MODEL:
+  ARCHITECTURE: 'mala'
+  INPUT_SIZE: [53, 268, 268]   # 原作: [84, 268, 268], SuperHuman仓库改为 [53, 268, 268]
+  OUTPUT_SIZE: [25, 56, 56]    # 原作: [56, 56, 56],   SuperHuman仓库改为 [25, 56, 56]
+  TARGET_OPT: ["2"]
+  LOSS_OPTION: [["MalisLoss"]]
+  WEIGHT_OPT: [["0"]]
+  LOSS_WEIGHT: [[1.0]]
+  OUTPUT_ACT: [["sigmoid"]]
+DATASET:
+  OUTPUT_PATH: outputs/mala
+  PAD_SIZE: [14, 106, 106]
+  VAL_PAD_SIZE: [17,0,0]
+INFERENCE:
+  OUTPUT_PATH: outputs/mala/test
+  INPUT_SIZE: [53, 268, 268]   # 原作: [84, 268, 268]
+  OUTPUT_SIZE: [25, 56, 56]    # 原作: [56, 56, 56]
+  STRIDE: [25, 56, 56]        
+  PAD_SIZE: [14, 106, 106]     
+MONITOR:
+  WANDB_PROJECT: "Baselines"
