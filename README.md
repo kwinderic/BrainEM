@@ -280,7 +280,6 @@ connectomics/          framework: models, data, trainer, config
 projects/              one directory per method: main.py + configs/ + model code
 configs/datasets/      dataset paths, read by both bash and python
 scripts/               post_process.py, eval.py, vis_slices.py, sweep_waterz.py
-cremi_python/          CREMI's official evaluation API, used by eval.py
 exps/_lib/             pipeline: common.sh, env.sh, template_method.sh
 exps/BrainEM/scripts/  the 16 method scripts and the two SSL pretrainings
 exps/BrainEM/outputs/  checkpoints and predictions (gitignored)
