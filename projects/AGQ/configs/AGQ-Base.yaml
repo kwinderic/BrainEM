@@ -1,0 +1,47 @@
+# AGQ (affinity_knet) -- affinity prediction with a learned instance-query decoder.
+#
+# Two target heads: "9-1" is the raw instance label (consumed by the query
+# decoder) and "2" is the 3-channel affinity, which is what post-processing and
+# every metric use. Dataset paths come from --config-base configs/datasets/*.yaml.
+SYSTEM:
+  NUM_GPUS: 1
+  NUM_CPUS: 4
+SOLVER:
+  NAME: Adam
+  LR_SCHEDULER_NAME: WarmupCosineLR
+  BASE_LR: 0.0001
+  ITERATION_STEP: 1
+  ITERATION_SAVE: 10000
+  ITERATION_TOTAL: 100000
+  ITERATION_VAL: 10000
+  SAMPLES_PER_BATCH: 1
+MODEL:
+  ARCHITECTURE: affinity_knet
+  WITH_AFFINITY: True
+  BLOCK_TYPE: residual
+  FILTERS: [28, 36, 48, 64, 80]
+  INPUT_SIZE: [17, 257, 257]
+  OUTPUT_SIZE: [17, 257, 257]
+  # Instance queries: 100 masks initialised by connected components, all learned.
+  INIT_MASK_METHOD: connected_components
+  NUM_MASKS: 100
+  NUM_LEARNED_MASKS: 100
+  AFFINITY_FOR_MASK: False
+  INFERENCE_WITHOUT_BG: False
+  TARGET_OPT: ["9-1", "2"]
+  LOSS_OPTION: [["WeightedBCEWithLogitsLoss", "DiceLoss"], ["WeightedBCEWithLogitsLoss"]]
+  LOSS_WEIGHT: [[1.0, 0.5], [1.0]]
+  WEIGHT_OPT: [["1", "0"], ["0"]]
+  OUTPUT_ACT: [["none", "sigmoid"], ["sigmoid"]]
+DATASET:
+  PAD_SIZE: [4, 64, 64]
+INFERENCE:
+  INPUT_SIZE: [17, 257, 257]
+  OUTPUT_SIZE: [17, 257, 257]
+  STRIDE: [9, 128, 128]
+  PAD_SIZE: [4, 32, 32]
+  OUTPUT_NAME: result.h5
+  # Two heads out; only the affinity one is written for post-processing.
+  OUTPUT_ACT: ["sigmoid", "sigmoid"]
+MONITOR:
+  WANDB_PROJECT: "BrainEM"

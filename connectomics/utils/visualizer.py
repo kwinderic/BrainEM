@@ -1,6 +1,8 @@
 from __future__ import print_function, division
 from typing import Optional, List, Union, Tuple
 
+import os
+
 import torch
 import torchvision.utils as vutils
 import numpy as np
@@ -71,9 +73,9 @@ class Visualizer(object):
 
     def visualize(self, volume, label, output, weight, iter_total, writer,
                   suffix: Optional[str] = None, additional_image_groups: Optional[dict] = None,
-                  dcl: bool=False):
+                  dcl: bool=False, vis_dir: Optional[str] = None):
         self.visualize_image_groups(writer, iter_total, additional_image_groups)
-        
+
         volume = self._denormalize(volume)
         # split the prediction into chunks along the channel dimension
         output = self.act(output)
@@ -127,7 +129,8 @@ class Visualizer(object):
                     weight_maps[w_name] = weight[idx][j]
 
             self.visualize_consecutive(volume, label[idx], output[idx], weight_maps,
-                                       iter_total, writer, RGB=RGB, vis_name=vis_name)
+                                       iter_total, writer, RGB=RGB, vis_name=vis_name,
+                                       vis_dir=vis_dir)
 
     def visualize_image_groups(self, writer, iteration, image_groups: Optional[dict] = None,
                                is_3d: bool = True) -> None:
@@ -147,7 +150,8 @@ class Visualizer(object):
             writer.add_image('Image_Group_%s' % name, canvas_show, iteration)
 
     def visualize_consecutive(self, volume, label, output, weight_maps, iteration,
-                              writer, RGB=False, vis_name='0_0'):
+                              writer, RGB=False, vis_name='0_0',
+                              vis_dir: Optional[str] = None):
         volume, label, output, weight_maps = self.prepare_data(
             volume, label, output, weight_maps)
         sz = volume.size()  # z,c,y,x
@@ -180,7 +184,13 @@ class Visualizer(object):
         canvas_show = vutils.make_grid(
             canvas_merge, nrow=8, normalize=True, scale_each=True)
 
-        writer.add_image('Consecutive_%s' % vis_name, canvas_show, iteration)
+        if writer is not None:
+            writer.add_image('Consecutive_%s' % vis_name, canvas_show, iteration)
+
+        if vis_dir is not None:
+            os.makedirs(vis_dir, exist_ok=True)
+            png_path = os.path.join(vis_dir, '%s_iter%07d.png' % (vis_name, iteration))
+            vutils.save_image(canvas_show, png_path)
 
     def prepare_data(self, volume, label, output, weight_maps):
         ndim = volume.ndim

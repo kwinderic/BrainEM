@@ -1,0 +1,22 @@
+# Data and training outputs live outside git.
+/datasets
+/exps/*/outputs/
+/exps/outputs/
+*.pth.tar
+*.h5
+*.npy
+
+# Pretrained backbone weights: fetched by
+# projects/SAM2AFF/sam2aff/sam2/checkpoints/download_ckpts.sh
+*.pt
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# Logging
+swanlog/
+wandb/
+events.out.tfevents.*

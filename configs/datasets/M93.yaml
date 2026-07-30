@@ -1,0 +1,18 @@
+# 9_3 stack (PYW). Note larger PAD_SIZE for this volume.
+DATASET:
+  INPUT_PATH: datasets/EM/pyw93/
+  IMAGE_NAME:     9_3_78_97_Stack_train.tif
+  LABEL_NAME:     9_3_78_97_Labels_train.tif
+  VAL_IMAGE_NAME: 9_3_78_97_Stack_test.tif
+  VAL_LABEL_NAME: 9_3_78_97_Labels_test.tif
+  PAD_SIZE:     [8, 128, 128]
+  VAL_PAD_SIZE: [8, 128, 128]
+
+INFERENCE:
+  INPUT_PATH: datasets/EM/pyw93/
+  IMAGE_NAME: 9_3_78_97_Stack.tif
+  LABEL_PATH: datasets/EM/pyw93/9_3_78_97_Labels.tif
+  OUTPUT_NAME: result.h5
+  PAD_SIZE: [16, 128, 128]
+  AUG_MODE: min
+  AUG_NUM: None

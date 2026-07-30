@@ -74,6 +74,22 @@ def build_model(cfg, device, rank=None):
         kwargs['name'] = model_arch
         kwargs['backbone_type'] = cfg.MODEL.BACKBONE
         kwargs['aux_out'] = cfg.MODEL.AUX_OUT
+    elif model_arch == 'swin3d_seg':
+        # 3D Swin-UNet (projects/Arch/arch/models/swin3d_seg.py).
+        # Maps cfg.MODEL.SWIN_* into the constructor's named args. This
+        # branch must come BEFORE the cfg_mixin branch below, otherwise
+        # the unet_simple cfg_mixin (registered by Arch) would inject
+        # UNET_BASE_CHANNEL kwargs that swin3d_seg doesn't understand.
+        kwargs['in_planes'] = cfg.MODEL.IN_PLANES
+        kwargs['out_planes'] = cfg.MODEL.OUT_PLANES
+        kwargs['embed_dim'] = cfg.MODEL.SWIN_EMBED_DIM
+        kwargs['depths'] = cfg.MODEL.SWIN_DEPTHS
+        kwargs['num_heads'] = cfg.MODEL.SWIN_HEADS
+        kwargs['patch_size'] = cfg.MODEL.SWIN_PATCH_SIZE
+        kwargs['window_size'] = cfg.MODEL.SWIN_WINDOW_SIZE
+        kwargs['mlp_ratio'] = cfg.MODEL.SWIN_MLP_RATIO
+        kwargs['dropout'] = cfg.MODEL.SWIN_DROPOUT
+        kwargs['drop_path'] = cfg.MODEL.SWIN_DROP_PATH
 
     elif 'cfg_mixin' in MODEL_MAP:
         model_cls = MODEL_MAP[cfg.MODEL.ARCHITECTURE]

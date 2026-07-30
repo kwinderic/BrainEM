@@ -1,0 +1,10 @@
+# CREMI A+B+C 4nm (native FAFB resolution). Train pool: A+B+C train splits joined with '@';
+# val pool: A+B+C test splits. Use this when training at 4x4x40 nm.
+# No INFERENCE block — pair with a per-test-volume yaml when running eval_on.
+DATASET:
+  INPUT_PATH: datasets/EM/cremi/
+  IMAGE_NAME: sample_A_train_inputs.h5@sample_B_train_inputs.h5@sample_C_train_inputs.h5
+  LABEL_NAME: sample_A_train_labels.h5@sample_B_train_labels.h5@sample_C_train_labels.h5
+  VAL_IMAGE_NAME: sample_A_test_inputs.h5@sample_B_test_inputs.h5@sample_C_test_inputs.h5
+  VAL_LABEL_NAME: sample_A_test_labels.h5@sample_B_test_labels.h5@sample_C_test_labels.h5
+  PAD_SIZE: [4, 64, 64]

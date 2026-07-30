@@ -396,6 +396,10 @@ _C.SOLVER.ITERATION_SAVE = 5000
 _C.SOLVER.ITERATION_TOTAL = 40000
 _C.SOLVER.ITERATION_VAL = 5000
 
+# Run a full sliding-window inference over the validation volume every this many
+# iterations and save central-slice PNGs + scalar metrics. Set 0 to disable.
+_C.SOLVER.ITERATION_FULL_VAL = 0
+
 # Whether or not to restart training from iteration 0 regardless
 # of the 'iteration' key in the checkpoint file. This option only
 # works when a pretrained checkpoint is loaded (default: False).

@@ -129,8 +129,9 @@ class Trainer(TrainerBase):
             do_vis = self.monitor.update(iter_total, loss, losses_vis,
                                          self.optimizer.param_groups[0]['lr'])
             if do_vis:
+                vis_dir = os.path.join(self.cfg.DATASET.OUTPUT_PATH, 'vis_train')
                 self.monitor.visualize(
-                    volume, target, pred, weight, iter_total)
+                    volume, target, pred, weight, iter_total, vis_dir=vis_dir)
                 if torch.cuda.is_available():
                     GPUtil.showUtilization(all=True)
 
@@ -184,8 +185,10 @@ class Trainer(TrainerBase):
         if hasattr(self, 'monitor'):
             self.monitor.logger.log_tb.add_scalar(
                 'Validation_Loss', val_loss, iter_total)
+            vis_dir = os.path.join(self.cfg.DATASET.OUTPUT_PATH, 'vis_val')
             self.monitor.visualize(volume, target, pred,
-                                   weight, iter_total, suffix='Val')
+                                   weight, iter_total, suffix='Val',
+                                   vis_dir=vis_dir)
 
         if not hasattr(self, 'best_val_loss'):
             self.best_val_loss = val_loss

@@ -1,0 +1,17 @@
+# Wafer4 dataset config (test volume = wafer4_inputs_test.h5).
+DATASET:
+  INPUT_PATH: datasets/EM/wafer4/
+  IMAGE_NAME:     wafer4_inputs_train.h5
+  LABEL_NAME:     wafer4_labels_train.h5
+  VAL_IMAGE_NAME: wafer4_inputs_test.h5
+  VAL_LABEL_NAME: wafer4_labels_test.h5
+  PAD_SIZE: [4, 64, 64]
+
+INFERENCE:
+  INPUT_PATH: datasets/EM/wafer4/
+  IMAGE_NAME: wafer4_inputs_test.h5
+  LABEL_PATH: datasets/EM/wafer4/wafer4_labels_test.h5
+  OUTPUT_NAME: result.h5
+  PAD_SIZE: [4, 32, 32]
+  AUG_MODE: min
+  AUG_NUM: None

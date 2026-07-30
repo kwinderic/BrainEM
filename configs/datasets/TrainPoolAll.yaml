@@ -1,0 +1,10 @@
+# Multi-source training pool. Train-only — there is no canonical inference
+# volume for this pool, so INFERENCE here is intentionally empty. Pair this
+# base with a per-test-volume dataset config when running eval_on.
+DATASET:
+  INPUT_PATH: datasets/EM/
+  IMAGE_NAME:     Pool/train_pool_all_images.txt
+  LABEL_NAME:     Pool/train_pool_all_labels.txt
+  VAL_IMAGE_NAME: Pool/val_pool_all_images.txt
+  VAL_LABEL_NAME: Pool/val_pool_all_labels.txt
+  PAD_SIZE: [4, 64, 64]

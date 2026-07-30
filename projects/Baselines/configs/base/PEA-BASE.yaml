@@ -27,16 +27,15 @@ MODEL:
   IN_PLANES: 1
   # 4 multi-scale affinity targets -> DataLoader produces List[4 x Tensor[B,3,D,H,W]]
   TARGET_OPT: ["2-1-1-1-v1", "2-2-3-3-v1", "2-3-9-9-v1", "2-4-27-27-v1"]
-  # Framework Criterion config (PEA ignores these, uses internal WeightedMSE)
+  # Placeholders so the framework Criterion constructs; PEA computes its own
+  # loss (SCM + CCM + EPM) inside forward().
   LOSS_OPTION: [["WeightedMSE"], ["WeightedMSE"], ["WeightedMSE"], ["WeightedMSE"]]
   LOSS_WEIGHT: [[1.0], [1.0], [1.0], [1.0]]
   WEIGHT_OPT:  [["1"], ["1"], ["1"], ["1"]]
   OUTPUT_ACT:  [["none"], ["none"], ["none"], ["none"]]
 DATASET:
-  OUTPUT_PATH: outputs/SNEMI_PEA
   PAD_SIZE: [0, 0, 0]
 INFERENCE:
-  OUTPUT_PATH: outputs/SNEMI_PEA/test
   INPUT_SIZE: [18, 160, 160]
   OUTPUT_SIZE: [18, 160, 160]
   STRIDE: [10, 80, 80]
@@ -44,6 +43,7 @@ INFERENCE:
   OUTPUT_NAME: result.h5
   OUTPUT_ACT:  ["none", "none", "none", "none"]
 MONITOR:
-  WANDB_PROJECT: "Baselines"
-  # PEA returns 16-ch embedding (not 12-ch affinity), framework visualization would crash.
+  WANDB_PROJECT: "BrainEM"
+  # PEA returns a 16-channel embedding rather than affinity, which the framework
+  # visualization does not render; set high to skip it.
   ITERATION_NUM: [1000000, 1000000]

@@ -1,14 +1,14 @@
 """
-UNet_PNI_embedding — 3D U-Net (单输出头版本)
+UNet_PNI_embedding -- 3D U-Net (single output head)
 
-与 PEA 的 UNet_PNI_embedding_deep 共享相同的骨干网络 (resBlock_pni),
-区别是只有一个输出投影头 (无多尺度深层监督)。
+Shares the same backbone (resBlock_pni) as PEA's UNet_PNI_embedding_deep,
+but has a single output projection head (no multi-scale deep supervision).
 
-输入:  [B, 1, D, H, W]
-输出:  [B, emd, D, H, W]  (emd 默认 16)
+Input:  [B, 1, D, H, W]
+Output: [B, emd, D, H, W]  (emd defaults to 16)
 
-来源: CAD/scripts_2_5d_3d/model_superhuman2.py
-构建块复制自 PEA (pea.py) 以保持模块独立
+Source: CAD/scripts_2_5d_3d/model_superhuman2.py
+Building blocks are duplicated from PEA (pea.py) to keep the module self-contained.
 """
 
 import torch
@@ -16,7 +16,7 @@ import torch.nn as nn
 
 
 # =============================================================================
-# 3D 构建块 (与 PEA 相同)
+# 3D building blocks (identical to PEA)
 # =============================================================================
 
 def init_conv(m, init_mode):
@@ -111,7 +111,7 @@ def upsampleBlock(in_planes, out_planes, up=(1, 2, 2), mode='bilinear',
 
 
 # =============================================================================
-# 残差块
+# Residual block
 # =============================================================================
 
 class resBlock_pni(nn.Module):
@@ -138,22 +138,22 @@ class resBlock_pni(nn.Module):
 
 
 # =============================================================================
-# UNet_PNI_embedding (单输出头)
+# UNet_PNI_embedding (single output head)
 # =============================================================================
 
 class UNet_PNI_embedding(nn.Module):
-    """3D U-Net + PNI 残差块，单输出头
+    """3D U-Net with PNI residual blocks, single output head
 
-    与 PEA 的 UNet_PNI_embedding_deep 区别:
-      - 只有一个最终输出投影 (out_put)，不产出 emd1-emd4
-      - forward 返回单个 embedding tensor
+    Differences from PEA's UNet_PNI_embedding_deep:
+      - single final output projection (out_put), no emd1-emd4
+      - forward returns a single embedding tensor
 
-    参数:
-        in_planes:      输入通道 (默认 1)
-        filters:        各层通道数 [28, 36, 48, 64, 80]
-        upsample_mode:  上采样模式
-        merge_mode:     跳接模式 ('add' | 'cat')
-        emd:            输出 embedding 维度 (默认 16)
+    Args:
+        in_planes:      input channels (default 1)
+        filters:        per-level channel counts [28, 36, 48, 64, 80]
+        upsample_mode:  upsampling mode
+        merge_mode:     skip-connection mode ('add' | 'cat')
+        emd:            output embedding dimension (default 16)
     """
     def __init__(self,
                  in_planes=1,
@@ -194,7 +194,6 @@ class UNet_PNI_embedding(nn.Module):
             [f[0]], [f[0]], [(1, 5, 5)], [1], [(0, 2, 2)],
             [True], [pad_mode], [''], [relu_mode], init_mode, bn_momentum)
 
-        # 单输出投影头
         self.out_put = conv3dBlock([f[0]], [emd], [(1, 1, 1)], init_mode=init_mode)
 
     @staticmethod

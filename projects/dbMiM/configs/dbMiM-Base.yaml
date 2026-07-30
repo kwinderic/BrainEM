@@ -1,0 +1,80 @@
+# dbMiM supervised finetuning (anisotropic UNETR affinity).
+# Dataset paths come from --config-base configs/datasets/*.
+#
+# Hyperparameters follow the reference R48 recipe
+# (dbMiM/configs/finetune_cremi_real_unetr_aniso_em_mse_maws_publicem_r16_seed309_long20k_r48q.yaml):
+# AdamW lr 8e-5 with the ViT encoder at 1e-5, constant (the reference has NO LR
+# scheduler and NO warmup), weight decay 0.01, 20k steps, crop 32x160x160.
+SYSTEM:
+  NUM_GPUS: 1
+  NUM_CPUS: 4
+MONITOR:
+  WANDB_PROJECT: "dbMiM"
+  ITERATION_NUM: [20, 1000]
+MODEL:
+  ARCHITECTURE: 'dbmim_unetr_aniso_em'
+  IN_PLANES: 1
+  OUT_PLANES: 3
+  INPUT_SIZE: [32, 160, 160]
+  OUTPUT_SIZE: [32, 160, 160]
+  # Nearest-neighbor z/y/x affinity, matching the reference targets.
+  # seg2aff_v0 defaults to pad='replicate', which is exactly the reference's
+  # replicate_affinity_boundary: true (verified numerically identical).
+  TARGET_OPT: ['2']
+  WEIGHT_OPT: [['0']]
+  # widen_border / widen_border_radius: 1 in every reference config. The
+  # framework's seg_widen_border is the same Kisuk Lee A.1.4 in-plane border
+  # invalidation, wired through LABEL_EROSION.
+  LABEL_EROSION: 1
+  # The model computes its own MSE+MAWS loss inside forward, so no framework
+  # criterion is built; these keep the config self-consistent for the
+  # visualizer, which splits predictions per TARGET_OPT.
+  LOSS_OPTION: [['WeightedMSE']]
+  LOSS_WEIGHT: [[1.0]]
+  OUTPUT_ACT: [['none']]
+  # ViT / decoder geometry (reference: embed 192, depth 6, heads 6, feat 32).
+  DBMIM_PATCH_SIZE: [4, 16, 16]
+  DBMIM_EMBED_DIM: 192
+  DBMIM_DEPTH: 6
+  DBMIM_NUM_HEADS: 6
+  DBMIM_FEATURE_SIZE: 32
+  DBMIM_DROPOUT: 0.05
+  DBMIM_EM_REFINE_DEPTH: 2
+  DBMIM_CHANNEL_BIAS_INIT: [-0.2, 0.0, 0.0]
+  # MAWS: weight = 1 + w * edge(image), z down-weighted for anisotropy.
+  DBMIM_MEMBRANE_WEIGHT: 0.75
+  DBMIM_MEMBRANE_AXIS_WEIGHTS: [0.25, 1.0, 1.0]
+  DBMIM_MEMBRANE_CLIP: 4.0
+  DBMIM_MEMBRANE_NORMALIZE: True
+  DBMIM_CHANNEL_WEIGHTS: [1.35, 1.0, 1.0]
+DATASET:
+  # dbMiM operates on [0, 1] intensities: 'sigmoid' makes normalize_image a
+  # no-op so the raw scaled image reaches both the model and the MAWS edge map.
+  MATCH_ACT: 'sigmoid'
+  PAD_SIZE: [4, 64, 64]
+SOLVER:
+  # SOLVER.NAME is unused here: both the finetune and SSL paths construct
+  # AdamW directly (finetune needs a separate lower-LR encoder group).
+  # Constant LR: the reference has no scheduler. WarmupMultiStepLR with no
+  # STEPS and WARMUP_ITERS 0 leaves the LR untouched for the whole run.
+  LR_SCHEDULER_NAME: WarmupMultiStepLR
+  STEPS: []
+  WARMUP_ITERS: 0
+  BASE_LR: 8.0e-05
+  WEIGHT_DECAY: 0.01
+  DBMIM_ENCODER_LR: 1.0e-05
+  # NOTE: the reference clips grad norm to 1.0 (clip_grad: 1.0 in both its
+  # pretrain and finetune configs). Not reproduced here -- deliberately left
+  # off, it is a stability guard and does not change the objective.
+  ITERATION_STEP: 1
+  ITERATION_SAVE: 2000
+  ITERATION_TOTAL: 20000
+  ITERATION_VAL: 1000000
+  SAMPLES_PER_BATCH: 2
+INFERENCE:
+  INPUT_SIZE: [32, 160, 160]
+  OUTPUT_SIZE: [32, 160, 160]
+  OUTPUT_ACT: ["sigmoid"]
+  STRIDE: [16, 80, 80]
+  PAD_SIZE: [16, 32, 32]
+  SAMPLES_PER_BATCH: 1

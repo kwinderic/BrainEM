@@ -1,0 +1,20 @@
+# FlyWire small crop: the top-left 200x2000x2000 of flywire_crop. Same-Source
+# test target, cheap enough to catch path or config mistakes before the full crop.
+# DATASET and INFERENCE point at the same volume, so this yaml can also serve as a
+# training pool -- rarely useful, since the labels are predictions, not GT.
+DATASET:
+  INPUT_PATH: datasets/EM/Flywire/
+  IMAGE_NAME:     flywire_crop_small_inputs.h5
+  LABEL_NAME:     flywire_crop_small_labels.h5
+  VAL_IMAGE_NAME: flywire_crop_small_inputs.h5
+  VAL_LABEL_NAME: flywire_crop_small_labels.h5
+  PAD_SIZE: [4, 64, 64]
+
+INFERENCE:
+  INPUT_PATH: datasets/EM/Flywire/
+  IMAGE_NAME: flywire_crop_small_inputs.h5
+  LABEL_PATH: datasets/EM/Flywire/flywire_crop_small_labels.h5
+  OUTPUT_NAME: result.h5
+  PAD_SIZE: [4, 32, 32]
+  AUG_MODE: min
+  AUG_NUM: None

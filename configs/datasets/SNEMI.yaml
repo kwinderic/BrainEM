@@ -1,0 +1,20 @@
+# SNEMI (AC3/AC4). Train on AC4, evaluate on AC3.
+# Dataset paths only -- solver, model and loss settings live in the per-method
+# config passed via --config-file.
+
+DATASET:
+  INPUT_PATH: datasets/EM/AC3-AC4/
+  IMAGE_NAME:     AC4_train_inputs.h5
+  LABEL_NAME:     AC4_train_labels.h5
+  VAL_IMAGE_NAME: AC4_val_inputs.h5
+  VAL_LABEL_NAME: AC4_val_labels.h5
+  PAD_SIZE: [4, 64, 64]
+
+INFERENCE:
+  INPUT_PATH: datasets/EM/AC3-AC4/
+  IMAGE_NAME: AC3_inputs.h5
+  LABEL_PATH: datasets/EM/AC3-AC4/AC3_labels.h5
+  OUTPUT_NAME: result.h5
+  PAD_SIZE: [4, 32, 32]
+  AUG_MODE: min
+  AUG_NUM: None

@@ -145,15 +145,19 @@ class Monitor(object):
         return do_vis
 
     def visualize(self, volume, label, output, weight, iter_total,
-                  suffix: Optional[str] = None, **kwargs) -> None:
+                  suffix: Optional[str] = None,
+                  vis_dir: Optional[str] = None, **kwargs) -> None:
         """Visualize inputs, predictions, labels and weight masks for
         common supervised and semi-supervised training schemes.
+
+        If ``vis_dir`` is set, each composed canvas is also saved as a PNG
+        under that directory (in addition to the TensorBoard image stream).
         """
         assert isinstance(output, (torch.Tensor, OrderedDict))
         if isinstance(output, torch.Tensor):
             self.vis.visualize(
                 volume, label, output, weight, iter_total,
-                self.logger.log_tb, suffix, **kwargs)
+                self.logger.log_tb, suffix, vis_dir=vis_dir, **kwargs)
             return
 
         # visualize OrderedDict predicted by DeepLab
@@ -163,7 +167,8 @@ class Monitor(object):
             else:
                 suffix_key = key
             self.vis.visualize(volume, label, output[key], weight,
-                               iter_total, self.logger.log_tb, suffix_key)
+                               iter_total, self.logger.log_tb, suffix_key,
+                               vis_dir=vis_dir)
 
     def visualize_image_groups(self, iter_total: int, image_groups: dict,
                                **kwargs) -> None:

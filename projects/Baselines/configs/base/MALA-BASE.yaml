@@ -1,8 +1,14 @@
+# MALA -- 3D U-Net trained with MALIS loss.
+#
+# The one valid-padding network in this benchmark: output is smaller than input,
+# so inference strides by OUTPUT_SIZE with no overlap between windows, and
+# PAD_SIZE covers the (input - output) / 2 margin on each side.
 SYSTEM:
   NUM_GPUS: 1
   NUM_CPUS: 4
 SOLVER:
-  NAME: Adam  # 原作: Adam, lr=0.5e-4, beta1=0.95, beta2=0.999, eps=1e-8
+  # Original: Adam, lr 0.5e-4, beta1 0.95, beta2 0.999, eps 1e-8.
+  NAME: Adam
   LR_SCHEDULER_NAME: WarmupCosineLR
   BASE_LR: 0.0001
   ITERATION_STEP: 1
@@ -12,23 +18,25 @@ SOLVER:
   SAMPLES_PER_BATCH: 2
 MODEL:
   ARCHITECTURE: 'mala'
-  INPUT_SIZE: [84, 268, 268]   # 原作: [84, 268, 268], SuperHuman仓库改为 [53, 268, 268]
-  OUTPUT_SIZE: [56, 56, 56]   # 原作: [56, 56, 56],   SuperHuman仓库改为 [25, 56, 56]
+  # Original geometry. The SuperHuman reimplementation uses a shorter variant
+  # ([53, 268, 268] -> [25, 56, 56]); we keep the original.
+  INPUT_SIZE: [84, 268, 268]
+  OUTPUT_SIZE: [56, 56, 56]
   TARGET_OPT: ["2"]
+  # MALIS loss is what defines this method, so it is not replaced by the
+  # BCE + Dice objective the other baselines share.
   LOSS_OPTION: [["MalisLoss"]]
   WEIGHT_OPT: [["0"]]
   LOSS_WEIGHT: [[1.0]]
   OUTPUT_ACT: [["sigmoid"]]
 DATASET:
-  OUTPUT_PATH: outputs/mala
   PAD_SIZE: [14, 106, 106]
-  VAL_PAD_SIZE: [32,0,0]  #crop size太大了，防止不够用     
+  # Extra z padding so a 84-slice input patch fits in the validation volume.
+  VAL_PAD_SIZE: [32, 0, 0]
 INFERENCE:
-  OUTPUT_PATH: outputs/mala/test
-  INPUT_SIZE: [84, 268, 268]   # 原作: [84, 268, 268]
-  OUTPUT_SIZE: [56, 56, 56]   # 原作: [56, 56, 56]
-  STRIDE: [56, 56, 56]        
-  PAD_SIZE: [14, 106, 106]     
+  INPUT_SIZE: [84, 268, 268]
+  OUTPUT_SIZE: [56, 56, 56]
+  STRIDE: [56, 56, 56]
+  PAD_SIZE: [14, 106, 106]
 MONITOR:
-  WANDB_PROJECT: "Baselines"
-  
+  WANDB_PROJECT: "BrainEM"

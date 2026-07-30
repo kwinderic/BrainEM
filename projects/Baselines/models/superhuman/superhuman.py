@@ -1,16 +1,16 @@
 """
-models.py — python main.py -c=seg_3d 链路所需模型代码
+models.py -- model code for the `python main.py -c=seg_3d` pipeline
 
-config: seg_3d.yaml → model_type: 'superhuman' → UNet_PNI
+config: seg_3d.yaml -> model_type: 'superhuman' -> UNet_PNI
 
-依赖关系:
+Dependencies:
   UNet_PNI
     └── resBlock_pni
           └── conv3dBlock ─── getConv3d, getBN, getRelu, init_conv
     └── conv3dBlock
     └── upsampleBlock ──────── init_conv
 
-使用:
+Usage:
     from model.models import UNet_PNI
     model = UNet_PNI(in_planes=1, out_planes=3, filters=[28,36,48,64,80])
 """
@@ -20,11 +20,11 @@ import torch.nn as nn
 from ..model import *
 
 # =============================================================================
-# 工具函数
+# Utilities
 # =============================================================================
 
 def init_conv(m, init_mode):
-    """卷积层权重初始化"""
+    """Weight initialization for convolution layers."""
     if isinstance(m, (nn.Conv3d, nn.ConvTranspose3d)):
         if init_mode == 'kaiming_normal':
             nn.init.kaiming_normal_(m.weight)
@@ -39,7 +39,7 @@ def init_conv(m, init_mode):
 
 
 def getRelu(mode='elu'):
-    """激活函数工厂: 'relu' | 'elu' | 'leaky<slope>'"""
+    """Activation factory: 'relu' | 'elu' | 'leaky<slope>'"""
     if mode == 'relu':
         return nn.ReLU(inplace=True)
     elif mode == 'elu':
@@ -50,13 +50,13 @@ def getRelu(mode='elu'):
 
 
 def getBN(out_planes, bn_mode='async', bn_momentum=0.1):
-    """3D BatchNorm 工厂: 'async'（标准 BN）| 'sync'（此处用标准 BN 替代）"""
+    """3D BatchNorm factory: 'async' (standard BN) | 'sync' (standard BN used here as a substitute)"""
     return nn.BatchNorm3d(out_planes, momentum=bn_momentum)
 
 
 def getConv3d(in_planes, out_planes, kernel_size, stride, padding,
               bias, pad_mode='zero', init_mode='', dilation_size=(1, 1, 1)):
-    """3D 卷积层构建，支持 zero / replicate padding"""
+    """Build a 3D convolution layer with zero / replicate padding."""
     if pad_mode == 'zero':
         layers = [nn.Conv3d(in_planes, out_planes, kernel_size=kernel_size,
                             dilation=dilation_size, padding=padding,
@@ -77,7 +77,7 @@ def conv3dBlock(in_planes, out_planes,
                 kernel_size=[(3, 3, 3)], stride=[1], padding=[0],
                 bias=[True], pad_mode=['zero'], bn_mode=[''], relu_mode=[''],
                 init_mode='kaiming_normal', bn_momentum=0.1, dilation_size=None):
-    """VGG 风格 3D 卷积块：可堆叠 [Conv → BN → ReLU]"""
+    """VGG-style 3D conv block: stackable [Conv -> BN -> ReLU]"""
     layers = []
     if dilation_size is None:
         dilation_size = [(1, 1, 1)] * len(in_planes)
@@ -96,12 +96,12 @@ def conv3dBlock(in_planes, out_planes,
 def upsampleBlock(in_planes, out_planes, up=(1, 2, 2), mode='bilinear',
                   kernel_size=(1, 1, 1), stride=(1, 1, 1), padding=(0, 0, 0),
                   bias=True, init_mode=''):
-    """3D 上采样块
+    """3D upsampling block
     mode:
-      'bilinear'   — trilinear 插值 + 1x1x1 conv
-      'nearest'    — nearest 插值 + 1x1x1 conv
-      'transpose'  — 转置卷积（密集）
-      'transposeS' — 深度可分离转置卷积（稀疏，推荐）
+      'bilinear'   trilinear interpolation + 1x1x1 conv
+      'nearest'    nearest interpolation + 1x1x1 conv
+      'transpose'  transposed convolution (dense)
+      'transposeS' depthwise-separable transposed convolution (sparse, recommended)
     """
     if mode == 'bilinear':
         layers = [nn.Upsample(scale_factor=up, mode='trilinear', align_corners=True),
@@ -127,15 +127,15 @@ def upsampleBlock(in_planes, out_planes, up=(1, 2, 2), mode='bilinear',
 
 
 # =============================================================================
-# 残差块
+# Residual block
 # =============================================================================
 
 class resBlock_pni(nn.Module):
-    """PNI 残差块（各向异性 EM 图像专用）
+    """PNI residual block (for anisotropic EM images)
 
-    结构:
-      block1: 1×3×3 conv+BN+ReLU  （维度对齐）
-      block2: 3×3×3 conv+BN+ReLU → 3×3×3 conv+BN  （残差两层）
+    Structure:
+      block1: 1x3x3 conv+BN+ReLU  (channel projection)
+      block2: 3x3x3 conv+BN+ReLU -> 3x3x3 conv+BN  (two residual layers)
       block3: BN
       block4: ReLU
     ref: https://github.com/torms3/Superhuman
@@ -164,26 +164,26 @@ class resBlock_pni(nn.Module):
 
 # =============================================================================
 # UNet_PNI (superhuman)
-# 论文: Superhuman Accuracy on the SNEMI3D Connectomics Challenge
+# Paper: Superhuman Accuracy on the SNEMI3D Connectomics Challenge
 # https://arxiv.org/abs/1706.00120
 # =============================================================================
 
 @register_model("superhuman")
 class UNet_PNI(nn.Module):
-    """5 层 UNet + PNI 残差块，用于 3D affinity 预测
+    """5-level UNet with PNI residual blocks for 3D affinity prediction
 
-    输入: (B, 1, D, H, W)   推荐尺寸: (B, 1, 18, 160, 160)
-    输出: (B, 3, D, H, W)   z/y/x 三方向亲和力图，值域 [0,1]
+    Input:  (B, 1, D, H, W)   recommended size: (B, 1, 18, 160, 160)
+    Output: (B, 3, D, H, W)   z/y/x affinity maps in [0,1]
 
-    关键参数 (对应 seg_3d.yaml → MODEL):
-        filters       : 各层通道数，默认 [28,36,48,64,80]
-        upsample_mode : 'bilinear' | 'transposeS' 等
-        merge_mode    : 'add'（相加跳接）| 'cat'（拼接跳接）
+    Key args (mapped from seg_3d.yaml -> MODEL):
+        filters       : per-level channel counts, default [28,36,48,64,80]
+        upsample_mode : 'bilinear' | 'transposeS' | ...
+        merge_mode    : 'add' (additive skip) | 'cat' (concatenated skip)
         pad_mode      : 'zero' | 'replicate'
-        bn_mode       : 'async'（标准 BN）
+        bn_mode       : 'async' (standard BN)
         relu_mode     : 'elu' | 'relu' | 'leaky<slope>'
-        init_mode     : 'kaiming_normal' 等
-        if_sigmoid    : 输出是否过 sigmoid
+        init_mode     : 'kaiming_normal' | ...
+        if_sigmoid    : whether to apply sigmoid to the output
     """
     def __init__(self,
                  in_planes=1,
@@ -207,12 +207,12 @@ class UNet_PNI(nn.Module):
         self.if_sigmoid = if_sigmoid
         self.show_feature = show_feature
 
-        # 输入嵌入：1×5×5（各向异性处理，z 方向不卷）
+        # Input embedding: 1x5x5 (anisotropic, no convolution along z)
         self.embed_in = conv3dBlock(
             [in_planes], [f[0]], [(1, 5, 5)], [1], [(0, 2, 2)],
             [True], [pad_mode], [''], [relu_mode], init_mode, bn_momentum)
 
-        # 编码器
+        # encoder
         self.conv0 = resBlock_pni(f[0], f[1], pad_mode, bn_mode, relu_mode, init_mode, bn_momentum)
         self.pool0 = nn.MaxPool3d((1, 2, 2), (1, 2, 2))
         self.conv1 = resBlock_pni(f[1], f[2], pad_mode, bn_mode, relu_mode, init_mode, bn_momentum)
@@ -222,21 +222,21 @@ class UNet_PNI(nn.Module):
         self.conv3 = resBlock_pni(f[3], f[4], pad_mode, bn_mode, relu_mode, init_mode, bn_momentum)
         self.pool3 = nn.MaxPool3d((1, 2, 2), (1, 2, 2))
 
-        # 瓶颈
+        # bottleneck
         self.center = resBlock_pni(f[4], f[5], pad_mode, bn_mode, relu_mode, init_mode, bn_momentum)
 
-        # 解码器（4 层对称）
+        # decoder (4 symmetric levels)
         self.up0, self.cat0, self.conv4 = self._dec_block(f[5], f[4], upsample_mode, merge_mode, pad_mode, bn_mode, relu_mode, init_mode, bn_momentum)
         self.up1, self.cat1, self.conv5 = self._dec_block(f[4], f[3], upsample_mode, merge_mode, pad_mode, bn_mode, relu_mode, init_mode, bn_momentum)
         self.up2, self.cat2, self.conv6 = self._dec_block(f[3], f[2], upsample_mode, merge_mode, pad_mode, bn_mode, relu_mode, init_mode, bn_momentum)
         self.up3, self.cat3, self.conv7 = self._dec_block(f[2], f[1], upsample_mode, merge_mode, pad_mode, bn_mode, relu_mode, init_mode, bn_momentum)
 
-        # 输出嵌入：1×5×5
+        # Output embedding: 1x5x5
         self.embed_out = conv3dBlock(
             [f[0]], [f[0]], [(1, 5, 5)], [1], [(0, 2, 2)],
             [True], [pad_mode], [''], [relu_mode], init_mode, bn_momentum)
 
-        # 输出头：1×1×1 → out_planes
+        # Output head: 1x1x1 -> out_planes
         self.out_put = conv3dBlock([f[0]], [out_planes], [(1, 1, 1)], init_mode=init_mode)
 
     @staticmethod
@@ -280,4 +280,4 @@ if __name__ == '__main__':
     model = UNet_PNI(filters=[28, 36, 48, 64, 80], upsample_mode='bilinear', merge_mode='add')
     out = model(x)
     print(f'in: {list(x.shape)}  ->  out: {list(out.shape)}')
-    # 预期: in: [1, 1, 18, 160, 160]  ->  out: [1, 3, 18, 160, 160]
+    # expected: in: [1, 1, 18, 160, 160]  ->  out: [1, 3, 18, 160, 160]

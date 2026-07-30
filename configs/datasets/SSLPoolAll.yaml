@@ -1,0 +1,11 @@
+# Unlabeled pool for self-supervised pretraining: the 48 TrainPoolAll volumes
+# plus the full FlyWire crop (400x4000x4000).
+#
+# Pair with DATASET.LABEL_NAME None: VolumeDataset then yields images only.
+DATASET:
+  INPUT_PATH: datasets/EM/
+  IMAGE_NAME:     Pool/ssl_pool_all_images.txt
+  LABEL_NAME:     None
+  VAL_IMAGE_NAME: None
+  VAL_LABEL_NAME: None
+  PAD_SIZE: [4, 64, 64]

@@ -1,13 +1,13 @@
 """
-mala.py — MALA UNet3D 模型
+mala.py -- MALA UNet3D model
 
-config: MALA-BASE.yaml → ARCHITECTURE: 'mala' → UNet3D_MALA
+config: MALA-BASE.yaml -> ARCHITECTURE: 'mala' -> UNet3D_MALA
 
-依赖关系:
+Dependencies:
   UNet3D_MALA
     └── nn.Conv3d, nn.ConvTranspose3d, nn.MaxPool3d
 
-使用:
+Usage:
     from models.mala.mala import UNet3D_MALA
     model = UNet3D_MALA(output_nc=3, if_sigmoid=True, init_mode='kaiming')
 """
@@ -21,21 +21,21 @@ from ..model import *
 
 # =============================================================================
 # UNet3D_MALA
-# 论文: Large Scale Image Segmentation with Structured Loss based Deep Learning
-#       for Connectome Reconstruction (MALA)
+# Paper: Large Scale Image Segmentation with Structured Loss based Deep Learning
+#        for Connectome Reconstruction (MALA)
 # =============================================================================
 
 @register_model("mala")
 class UNet3D_MALA(nn.Module):
-    """3 层 UNet (MALA 风格)，用于 3D affinity 预测
+    """3-level UNet (MALA style) for 3D affinity prediction
 
-    输入: (B, 1, D, H, W)   推荐尺寸: (B, 1, 84, 268, 268)
-    输出: (B, out_planes, D', H', W')   z/y/x 亲和力图
+    Input:  (B, 1, D, H, W)   recommended size: (B, 1, 84, 268, 268)
+    Output: (B, out_planes, D', H', W')   z/y/x affinity maps
 
-    关键参数:
-        in_planes     : 输入通道数，默认 1
-        out_planes    : 输出通道数，默认 3 (z/y/x affinity)
-        if_sigmoid    : 输出是否过 sigmoid
+    Key args:
+        in_planes     : input channels, default 1
+        out_planes    : output channels, default 3 (z/y/x affinity)
+        if_sigmoid    : whether to apply sigmoid to the output
         init_mode     : 'kaiming' | 'xavier' | 'orthogonal'
     """
     def __init__(self,
@@ -50,7 +50,7 @@ class UNet3D_MALA(nn.Module):
         self.init_mode = init_mode
         self.show_feature = show_feature
 
-        # 编码器
+        # encoder
         self.conv1 = nn.Conv3d(in_planes, 12, 3, stride=1, padding=0, dilation=1, groups=1, bias=True)
         self.conv2 = nn.Conv3d(12, 12, 3, stride=1, padding=0, dilation=1, groups=1, bias=True)
         self.pool1 = nn.MaxPool3d(kernel_size=(1, 3, 3), stride=(1, 3, 3))
@@ -63,11 +63,11 @@ class UNet3D_MALA(nn.Module):
         self.conv6 = nn.Conv3d(300, 300, 3, stride=1, padding=0, dilation=1, groups=1, bias=True)
         self.pool3 = nn.MaxPool3d(kernel_size=(1, 3, 3), stride=(1, 3, 3))
 
-        # 瓶颈
+        # bottleneck
         self.conv7 = nn.Conv3d(300, 1500, 3, stride=1, padding=0, dilation=1, groups=1, bias=True)
         self.conv8 = nn.Conv3d(1500, 1500, 3, stride=1, padding=0, dilation=1, groups=1, bias=True)
 
-        # 解码器
+        # decoder
         self.dconv1 = nn.ConvTranspose3d(1500, 1500, (1, 3, 3), stride=(1, 3, 3), padding=0, dilation=1, groups=1500, bias=False)
         self.conv9 = nn.Conv3d(1500, 300, 1, stride=1, padding=0, dilation=1, groups=1, bias=True)
         self.conv10 = nn.Conv3d(600, 300, 3, stride=1, padding=0, dilation=1, groups=1, bias=True)
@@ -83,10 +83,10 @@ class UNet3D_MALA(nn.Module):
         self.conv16 = nn.Conv3d(24, 12, 3, stride=1, padding=0, dilation=1, groups=1, bias=True)
         self.conv17 = nn.Conv3d(12, 12, 3, stride=1, padding=0, dilation=1, groups=1, bias=True)
 
-        # 输出头
+        # output head
         self.conv18 = nn.Conv3d(12, out_planes, 1, stride=1, padding=0, dilation=1, groups=1, bias=True)
 
-        # 权重初始化
+        # weight initialization
         for m in self.modules():
             if isinstance(m, nn.Conv3d) or isinstance(m, nn.ConvTranspose3d):
                 if self.init_mode == 'kaiming':
@@ -108,8 +108,8 @@ class UNet3D_MALA(nn.Module):
         return torch.cat((upsampled, bypass), 1)
 
     def _forward_impl(self, x):
-        """网络前向传播，返回预测结果"""
-        # 编码器
+        """Network forward pass, returns the prediction."""
+        # encoder
         conv1 = F.leaky_relu(self.conv1(x), 0.005)
         conv2 = F.leaky_relu(self.conv2(conv1), 0.005)
         pool1 = self.pool1(conv2)
@@ -122,7 +122,7 @@ class UNet3D_MALA(nn.Module):
         conv7 = F.leaky_relu(self.conv7(pool3), 0.005)
         conv8 = F.leaky_relu(self.conv8(conv7), 0.005)
 
-        # 解码器
+        # decoder
         dconv1 = self.dconv1(conv8)
         conv9 = self.conv9(dconv1)
         mc1 = self.crop_and_concat(conv9, conv6, crop=True)
@@ -150,7 +150,7 @@ class UNet3D_MALA(nn.Module):
 
     @staticmethod
     def _center_crop(tensor, target_size):
-        """将 tensor 的空间维度 center-crop 到 target_size (D, H, W)"""
+        """Center-crop the spatial dims of tensor to target_size (D, H, W)."""
         _, _, d, h, w = tensor.shape
         td, th, tw = target_size
         sd = (d - td) // 2
@@ -160,10 +160,10 @@ class UNet3D_MALA(nn.Module):
 
     def forward(self, inputs, target=None, weight=None, criterion=None):
         pred = self._forward_impl(inputs)
-        if criterion is None:      # 推理模式
+        if criterion is None:      # inference mode
             return pred
-        # 训练模式: target/weight 尺寸 = INPUT_SIZE, pred 尺寸 = OUTPUT_SIZE
-        # 需要 center-crop target/weight 以对齐 pred
+        # Training mode: target/weight are at INPUT_SIZE while pred is at OUTPUT_SIZE,
+        # so target/weight must be center-cropped to align with pred.
         out_size = pred.shape[2:]   # (D', H', W')
         if isinstance(target, (list, tuple)):
             target = [self._center_crop(t, out_size) for t in target]

@@ -49,7 +49,7 @@ class CustomTrainer(Trainer):
 
             total_params = sum(p.numel() for p in self.model.parameters())
             
-            print(f"总参数数: {total_params}")
+            print(f"total params: {total_params}")
 
             try:
                 from mmcv.cnn.utils import get_model_complexity_info
@@ -82,7 +82,8 @@ class CustomTrainer(Trainer):
             self.total_time = 0
         else:
             self.update_checkpoint(checkpoint)
-            # PEA 推理输出 3 通道短程 affinity，覆盖 TARGET_OPT 避免 SplitActivation 不匹配
+            # PEA emits 3-channel short-range affinity at inference; override
+            # TARGET_OPT so SplitActivation matches.
             if cfg.MODEL.ARCHITECTURE == 'pea':
                 cfg.defrost()
                 cfg.MODEL.TARGET_OPT = ["2-1-1-1-v1"]

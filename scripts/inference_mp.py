@@ -19,8 +19,8 @@ import argparse
 from torch.utils.data import DataLoader
 from connectomics.model import update_state_dict
 
-sys.path.insert(0, 'projects/e2e')
-from projects.e2e.main import *
+sys.path.insert(0, 'projects/AGQ')
+from projects.AGQ.main import *
 
 
 def tick():

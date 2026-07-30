@@ -1,0 +1,17 @@
+# FlyWire full crop (400x4000x4000 from flywire_crop) 
+DATASET:
+  INPUT_PATH: datasets/EM/Flywire/
+  IMAGE_NAME:     flywire_crop_inputs.h5
+  LABEL_NAME:     flywire_crop_labels.h5
+  VAL_IMAGE_NAME: flywire_crop_inputs.h5
+  VAL_LABEL_NAME: flywire_crop_labels.h5
+  PAD_SIZE: [4, 64, 64]
+
+INFERENCE:
+  INPUT_PATH: datasets/EM/Flywire/
+  IMAGE_NAME: flywire_crop_inputs.h5
+  LABEL_PATH: datasets/EM/Flywire/flywire_crop_labels.h5
+  OUTPUT_NAME: result.h5
+  PAD_SIZE: [4, 32, 32]
+  AUG_MODE: min
+  AUG_NUM: None

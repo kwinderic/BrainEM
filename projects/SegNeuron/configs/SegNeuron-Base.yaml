@@ -1,0 +1,42 @@
+# SegNeuron supervised training. Dataset paths via --config-base configs/datasets/*.
+# MNet dual head: affinity (TARGET_OPT '2') + foreground mask (TARGET_OPT '0').
+SYSTEM:
+  NUM_GPUS: 1
+  NUM_CPUS: 4
+MONITOR:
+  WANDB_PROJECT: "SegNeuron"
+  ITERATION_NUM: [200, 1000]
+MODEL:
+  ARCHITECTURE: 'segneuron'
+  IN_PLANES: 1
+  OUT_PLANES: 3
+  FILTERS: [32, 64, 96, 128, 256]
+  INPUT_SIZE: [20, 128, 128]
+  OUTPUT_SIZE: [20, 128, 128]
+  TARGET_OPT: ['2', '0']
+  WEIGHT_OPT: [['1'], ['1']]
+  LOSS_OPTION: [['WeightedMSE'], ['WeightedMSE']]
+  LOSS_WEIGHT: [[1.0], [1.0]]
+  OUTPUT_ACT: [['none'], ['none']]
+  NORM_MODE: in
+# Solver per the SegNeuron PAPER: Adam, lr 1e-3, batch 8, 400k iters.
+# (The released YAML says base_lr 0.01, but the paper text specifies 1e-3;
+# we follow the paper.) Framework has no PolyLR, so WarmupCosineLR approximates
+# the decay. Adam eps kept at framework default.
+SOLVER:
+  NAME: Adam
+  LR_SCHEDULER_NAME: WarmupCosineLR
+  BASE_LR: 0.001
+  WARMUP_ITERS: 0
+  ITERATION_STEP: 1
+  ITERATION_SAVE: 2000
+  ITERATION_TOTAL: 400000
+  ITERATION_VAL: 2000
+  SAMPLES_PER_BATCH: 8
+INFERENCE:
+  INPUT_SIZE: [20, 128, 128]
+  OUTPUT_SIZE: [20, 128, 128]
+  OUTPUT_ACT: ["none", "none"]
+  STRIDE: [10, 64, 64]
+  PAD_SIZE: [4, 32, 32]
+  SAMPLES_PER_BATCH: 1

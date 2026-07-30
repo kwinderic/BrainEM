@@ -1,34 +1,34 @@
 """
-pea.py — python main.py -c=ac3ac4 链路所需全部代码（模型 + 损失 + EMA 输入）
+pea.py -- full code for the `python main.py -c=ac3ac4` pipeline (model + losses + EMA input)
 
-config: ac3ac4.yaml → model_type: 'pea' → UNet_PNI_embedding_deep
+config: ac3ac4.yaml -> model_type: 'pea' -> UNet_PNI_embedding_deep
 
-依赖关系:
+Dependencies:
   UNet_PNI_embedding_deep
     └── resBlock_pni
           └── conv3dBlock ─── getConv3d, getBN, getRelu, init_conv
     └── conv3dBlock
     └── upsampleBlock ──────── init_conv
 
-  损失函数:
-    embedding_loss_norm5     ← SCM: 12 通道多尺度余弦亲和力
-    embedding_loss_norm1     ← EPM: 3 通道短程余弦亲和力（中间层监督）
-    ema_embedding_loss_norm5 ← CCM: 12 通道交叉亲和力
-    convert_consistency_flip ← CCM: ema_embedding 坐标对齐
-    WeightedMSE              ← 带权重 MSE criterion
+  Losses:
+    embedding_loss_norm5     <- SCM: 12-channel multi-scale cosine affinity
+    embedding_loss_norm1     <- EPM: 3-channel short-range cosine affinity (deep supervision)
+    ema_embedding_loss_norm5 <- CCM: 12-channel cross affinity
+    convert_consistency_flip <- CCM: coordinate alignment of ema_embedding
+    WeightedMSE              <- weighted MSE criterion
 
-  EMA 输入生成:
-    make_ema_input           ← 三步串联: 亮度扰动 → cutout → 翻转
+  EMA input generation:
+    make_ema_input           <- three stages: intensity jitter -> cutout -> flip
 
-使用:
+Usage:
     from model.pea import UNet_PNI_embedding_deep
     model = UNet_PNI_embedding_deep(
         in_planes=1, out_planes=12, filters=[28,36,48,64,80],
         upsample_mode='bilinear', merge_mode='add', emd=16)
-    embedding = model(x)  # 推理: x: [B,1,18,160,160] → [B,emd,18,160,160]
-    pred, loss, vis = model(x, target, weight, criterion)  # 训练: 框架标准调用
+    embedding = model(x)  # inference: x: [B,1,18,160,160] -> [B,emd,18,160,160]
+    pred, loss, vis = model(x, target, weight, criterion)  # training: framework call
 
-训练总损失:
+Total training loss:
     loss = embedding_loss_norm5(embedding, ...)          # SCM
          + ema_embedding_loss_norm5(embedding, ema_emb)  # CCM
          + embedding_loss_norm1(emd1, down4[:,:3], ...)  # EPM ×4
@@ -48,16 +48,16 @@ from .utils import *
 
 
 # =============================================================================
-# 损失函数
+# Loss functions
 # =============================================================================
 
 
 
 class WeightedMSE(nn.Module):
-    """带权重的 MSE，所有 loss 的底层 criterion
+    """Weighted MSE, the base criterion for all losses
 
-    L = Σ[ weight * (pred - target)² ] / (B * spatial_size)
-    调用: criterion(pred, target, weightmap)
+    L = sum[ weight * (pred - target)^2 ] / (B * spatial_size)
+    Call: criterion(pred, target, weightmap)
     """
     def __init__(self):
         super().__init__()
@@ -76,13 +76,13 @@ class WeightedMSE(nn.Module):
 
 
 # -----------------------------------------------------------------------------
-# 内部辅助：单方向单偏移量的亲和力损失
+# Internal helper: affinity loss for a single direction and offset
 # -----------------------------------------------------------------------------
 
 def _single_offset_loss(embedding, order, shift, target, weightmap, criterion):
-    """计算一个 (方向, 偏移) 对的亲和力和损失
+    """Affinity and loss for one (direction, offset) pair
 
-    方向由 order % 3 决定: 0 → z 轴, 1 → y 轴, 2 → x 轴
+    Direction is given by order % 3: 0 -> z axis, 1 -> y axis, 2 -> x axis
     """
     B, C, D, H, W = embedding.shape
     ax = order % 3
@@ -107,7 +107,7 @@ def _single_offset_loss(embedding, order, shift, target, weightmap, criterion):
 
 
 def _ema_single_offset_loss(embedding, ema_embedding, order, shift, target, weightmap, criterion):
-    """交叉流版本：embedding 和 ema_embedding 之间的点积亲和力"""
+    """Cross-stream variant: dot-product affinity between embedding and ema_embedding."""
     B, C, D, H, W = embedding.shape
     ax = order % 3
 
@@ -131,18 +131,18 @@ def _ema_single_offset_loss(embedding, ema_embedding, order, shift, target, weig
 
 
 # -----------------------------------------------------------------------------
-# SCM: 12 通道多尺度余弦亲和力损失（最终 embedding）
+# SCM: 12-channel multi-scale cosine affinity loss (final embedding)
 # -----------------------------------------------------------------------------
 
 def embedding_loss_norm5(embedding, target, weightmap, criterion,
                          affs0_weight=1, shift=1, fill=True):
-    """12 通道多尺度亲和力损失
+    """12-channel multi-scale affinity loss
 
     shifts = [1,1,1, 2, 3,3,3, 9,9, 4, 27,27]
-    channels 0-2  (shift=1): z/y/x 短程  → weight * affs0_weight
-    channels 3-11 (shift>1): 长程偏移    → weight 1
+    channels 0-2  (shift=1): z/y/x short range -> weight * affs0_weight
+    channels 3-11 (shift>1): long-range offsets -> weight 1
 
-    返回: (scalar loss, affs tensor 同 target 形状)
+    Returns: (scalar loss, affs tensor with the same shape as target)
     """
     embedding = F.normalize(embedding, p=2, dim=1)
     shifts = [1, 1, 1, 2, 3, 3, 3, 9, 9, 4, 27, 27]
@@ -164,15 +164,16 @@ def embedding_loss_norm5(embedding, target, weightmap, criterion,
 
 
 # -----------------------------------------------------------------------------
-# EPM: 3 通道短程余弦亲和力损失（中间层 emd1–emd4 监督）
+# EPM: 3-channel short-range cosine affinity loss (supervision of emd1-emd4)
 # -----------------------------------------------------------------------------
 
 def embedding_loss_norm1(embedding, target, weightmap, criterion,
                          affs0_weight=1, shift=1, fill=True):
-    """3 通道亲和力损失 (z/y/x, shift=1)
+    """3-channel affinity loss (z/y/x, shift=1)
 
-    用于中间解码层输出 (emd1–emd4)，对应下采样的亲和力标签。
-    返回: (scalar loss, affs tensor 同 target 形状)
+    Applied to intermediate decoder outputs (emd1-emd4) against downsampled
+    affinity labels.
+    Returns: (scalar loss, affs tensor with the same shape as target)
     """
     embedding = F.normalize(embedding, p=2, dim=1)
     B, C, D, H, W = embedding.shape
@@ -196,39 +197,40 @@ def embedding_loss_norm1(embedding, target, weightmap, criterion,
 
 
 # -----------------------------------------------------------------------------
-# CCM: 坐标对齐（将 ema_embedding 逆翻转到原始坐标系）
+# CCM: coordinate alignment (un-flip ema_embedding back to the original frame)
 # -----------------------------------------------------------------------------
 
 def _augment_reverse_torch(data, rule):
-    """对单个样本的 embedding tensor [C, D, H, W] 做逆翻转/转置
+    """Inverse flip/transpose of a single sample's embedding tensor [C, D, H, W]
 
-    与 simple_augment 的操作完全相反：
-      simple_augment 顺序:  z → x → y → xy转置
-      本函数逆序:           xy转置 → y → x → z
+    Exactly inverts simple_augment:
+      simple_augment order:  z -> x -> y -> xy transpose
+      this function:         xy transpose -> y -> x -> z
 
-    rule: 长度 4 的数组，rule[i] ∈ {0, 1}
-      rule[0] → z轴翻转   rule[1] → x轴翻转
-      rule[2] → y轴翻转   rule[3] → xy转置
+    rule: length-4 array, rule[i] in {0, 1}
+      rule[0] -> z flip   rule[1] -> x flip
+      rule[2] -> y flip   rule[3] -> xy transpose
     """
     assert len(data.shape) == 4   # [C, D, H, W]
-    if rule[3]: data = data.permute(0, 1, 3, 2)   # 逆 xy-transpose
-    if rule[2]: data = torch.flip(data, [2])        # 逆 y-flip
-    if rule[1]: data = torch.flip(data, [3])        # 逆 x-flip
-    if rule[0]: data = torch.flip(data, [1])        # 逆 z-flip
+    if rule[3]: data = data.permute(0, 1, 3, 2)   # inverse xy-transpose
+    if rule[2]: data = torch.flip(data, [2])        # inverse y-flip
+    if rule[1]: data = torch.flip(data, [3])        # inverse x-flip
+    if rule[0]: data = torch.flip(data, [1])        # inverse z-flip
     return data
 
 
 def convert_consistency_flip(ema_embedding, rules):
-    """将 batch 内每个样本的 ema_embedding 逆翻转，对齐到原始坐标系
+    """Un-flip each sample's ema_embedding back into the original coordinate frame
 
-    ema_imgs 经过随机翻转后送入 model，输出的 ema_embedding 空间坐标
-    也随之翻转。本函数按 rule 逆序还原，使两路 embedding 坐标一致。
+    ema_imgs are randomly flipped before being fed to the model, so the spatial
+    coordinates of the resulting ema_embedding are flipped too. This function
+    reverses each rule so that both embeddings share the same coordinates.
 
-    输入:
+    Input:
       ema_embedding  [B, C, D, H, W]  GPU tensor
-      rules          [B, 4]           GPU tensor，来自 DataLoader
-    输出:
-      aligned        [B, C, D, H, W]  坐标已对齐的 ema_embedding
+      rules          [B, 4]           GPU tensor from the DataLoader
+    Output:
+      aligned        [B, C, D, H, W]  coordinate-aligned ema_embedding
     """
     B = ema_embedding.shape[0]
     ema_embedding = ema_embedding.detach().clone()
@@ -240,17 +242,18 @@ def convert_consistency_flip(ema_embedding, rules):
 
 
 # -----------------------------------------------------------------------------
-# CCM: 12 通道交叉亲和力损失（EMA 一致性）
+# CCM: 12-channel cross affinity loss (EMA consistency)
 # -----------------------------------------------------------------------------
 
 def ema_embedding_loss_norm5(embedding, ema_embedding, target, weightmap, criterion,
                               affs0_weight=1, shift=1, fill=True):
-    """EMA 一致性损失：两路 embedding 的交叉 12 通道亲和力
+    """EMA consistency loss: 12-channel cross affinity between the two embeddings
 
-    通过计算原始 embedding 和 EMA 增强 embedding 的点积亲和力，
-    与相同的 ground-truth 标签比较，强制两路输出一致。
+    Dot-product affinities between the original embedding and the EMA-augmented
+    embedding are compared against the same ground-truth labels, forcing the two
+    branches to agree.
 
-    返回: (scalar loss, affs tensor 同 target 形状)
+    Returns: (scalar loss, affs tensor with the same shape as target)
     """
     embedding     = F.normalize(embedding,     p=2, dim=1)
     ema_embedding = F.normalize(ema_embedding, p=2, dim=1)
@@ -274,14 +277,15 @@ def ema_embedding_loss_norm5(embedding, ema_embedding, target, weightmap, criter
 
 
 # =============================================================================
-# EMA 输入生成（数据层，CPU 端运行）
+# EMA input generation (data layer, runs on CPU)
 # =============================================================================
 
 class IntensityAugment:
-    """对比度 + 亮度随机扰动
+    """Random contrast and brightness jitter
 
-    让 EMA 路输入与原始输入在光度上不同，
-    但同一位置像素的语义（属于哪个神经元）不变。
+    Makes the EMA branch input photometrically different from the original
+    input while keeping the semantics of each pixel (which neuron it belongs
+    to) unchanged.
     """
     def __call__(self, imgs, contrast_factor=0.1, brightness_factor=0.1):
         imgs = imgs * (1 + contrast_factor)
@@ -295,10 +299,10 @@ def gen_mask(imgs,
              max_mask_counts=60,
              min_mask_size=(5, 10, 10),
              max_mask_size=(10, 20, 20)):
-    """随机 cutout 遮挡，生成二值 mask（0=遮挡，1=保留）
+    """Random cutout occlusion, returns a binary mask (0 = masked, 1 = kept)
 
-    输入: imgs  [D, H, W]  numpy float32
-    输出: mask  [D, H, W]  numpy float32，0 或 1
+    Input:  imgs  [D, H, W]  numpy float32
+    Output: mask  [D, H, W]  numpy float32, 0 or 1
     """
     crop_size = list(imgs.shape)          # [D, H, W]
     mask = np.ones_like(imgs, dtype=np.float32)
@@ -314,14 +318,14 @@ def gen_mask(imgs,
 
 
 def simple_augment(data, rule):
-    """对 numpy 3D 数据 [D, H, W] 按 rule 做翻转/转置
+    """Flip/transpose numpy 3D data [D, H, W] according to rule
 
-    rule: 长度 4 的二值数组
-      rule[0]=1 → z 轴翻转   rule[1]=1 → x 轴翻转
-      rule[2]=1 → y 轴翻转   rule[3]=1 → xy 轴互换（转置）
+    rule: length-4 binary array
+      rule[0]=1 -> z flip   rule[1]=1 -> x flip
+      rule[2]=1 -> y flip   rule[3]=1 -> swap x and y (transpose)
 
-    rule 必须随 batch 一起保存并传入训练循环，
-    供 convert_consistency_flip 做逆变换对齐坐标系。
+    rule must be stored with the batch and passed into the training loop so
+    convert_consistency_flip can invert it and realign the coordinate frames.
     """
     assert data.ndim == 3
     if rule[0]: data = data[::-1, :, :]
@@ -332,11 +336,11 @@ def simple_augment(data, rule):
 
 
 class Filp_EMA:
-    """封装随机翻转：生成 rule 并对 ema_imgs 做翻转
+    """Random flip wrapper: samples a rule and flips ema_imgs accordingly
 
-    调用: ema_imgs, rule = Filp_EMA()(ema_imgs)
-    输入: data  [D, H, W]  numpy float32
-    输出: (augmented_data [D,H,W],  rule [4,] uint8)
+    Call:   ema_imgs, rule = Filp_EMA()(ema_imgs)
+    Input:  data  [D, H, W]  numpy float32
+    Output: (augmented_data [D,H,W],  rule [4,] uint8)
     """
     def __call__(self, data):
         rule = np.random.randint(2, size=4)
@@ -352,18 +356,18 @@ def make_ema_input(imgs,
                    max_mask_counts=60,
                    min_mask_size=(5, 10, 10),
                    max_mask_size=(10, 20, 20)):
-    """三步串联生成 EMA 路输入
+    """Generate the EMA branch input in three stages
 
-    原始 imgs
-      → IntensityAugment   亮度/对比度扰动
-      → gen_mask           随机 cutout 遮挡
-      → Filp_EMA           随机翻转 + 记录 rule
-      → ema_imgs, rule
+    original imgs
+      -> IntensityAugment   brightness/contrast jitter
+      -> gen_mask           random cutout occlusion
+      -> Filp_EMA           random flip + recorded rule
+      -> ema_imgs, rule
 
-    输入: imgs  [D, H, W]  numpy float32，值域 [0,1]
-    输出:
+    Input:  imgs  [D, H, W]  numpy float32 in [0,1]
+    Output:
       ema_imgs  [D, H, W]  numpy float32
-      rule      [4,]       numpy uint8，全 0 表示未做翻转
+      rule      [4,]       numpy uint8, all zeros means no flip was applied
     """
     _aug_intensity = IntensityAugment()
     _aug_flip      = Filp_EMA()
@@ -391,14 +395,14 @@ def make_ema_input(imgs,
 
     
 # =============================================================================
-# 工具函数
+# Utilities
 # =============================================================================
 
 
 
 
 def init_conv(m, init_mode):
-    """卷积层权重初始化"""
+    """Weight initialization for convolution layers."""
     if isinstance(m, (nn.Conv3d, nn.ConvTranspose3d)):
         if init_mode == 'kaiming_normal':
             nn.init.kaiming_normal_(m.weight)
@@ -413,7 +417,7 @@ def init_conv(m, init_mode):
 
 
 def getRelu(mode='elu'):
-    """激活函数工厂: 'relu' | 'elu' | 'leaky<slope>'"""
+    """Activation factory: 'relu' | 'elu' | 'leaky<slope>'"""
     if mode == 'relu':
         return nn.ReLU(inplace=True)
     elif mode == 'elu':
@@ -424,13 +428,13 @@ def getRelu(mode='elu'):
 
 
 def getBN(out_planes, bn_mode='async', bn_momentum=0.1):
-    """3D BatchNorm 工厂: 'async'（标准 BN）| 'sync'（此处用标准 BN 替代）"""
+    """3D BatchNorm factory: 'async' (standard BN) | 'sync' (standard BN used here as a substitute)"""
     return nn.BatchNorm3d(out_planes, momentum=bn_momentum)
 
 
 def getConv3d(in_planes, out_planes, kernel_size, stride, padding,
               bias, pad_mode='zero', init_mode='', dilation_size=(1, 1, 1)):
-    """3D 卷积层构建，支持 zero / replicate padding"""
+    """Build a 3D convolution layer with zero / replicate padding."""
     if pad_mode == 'zero':
         layers = [nn.Conv3d(in_planes, out_planes, kernel_size=kernel_size,
                             dilation=dilation_size, padding=padding,
@@ -451,7 +455,7 @@ def conv3dBlock(in_planes, out_planes,
                 kernel_size=[(3, 3, 3)], stride=[1], padding=[0],
                 bias=[True], pad_mode=['zero'], bn_mode=[''], relu_mode=[''],
                 init_mode='kaiming_normal', bn_momentum=0.1, dilation_size=None):
-    """VGG 风格 3D 卷积块：可堆叠 [Conv → BN → ReLU]"""
+    """VGG-style 3D conv block: stackable [Conv -> BN -> ReLU]"""
     layers = []
     if dilation_size is None:
         dilation_size = [(1, 1, 1)] * len(in_planes)
@@ -470,12 +474,12 @@ def conv3dBlock(in_planes, out_planes,
 def upsampleBlock(in_planes, out_planes, up=(1, 2, 2), mode='bilinear',
                   kernel_size=(1, 1, 1), stride=(1, 1, 1), padding=(0, 0, 0),
                   bias=True, init_mode=''):
-    """3D 上采样块
+    """3D upsampling block
     mode:
-      'bilinear'   — trilinear 插值 + 1x1x1 conv
-      'nearest'    — nearest 插值 + 1x1x1 conv
-      'transpose'  — 转置卷积（密集）
-      'transposeS' — 深度可分离转置卷积（稀疏，推荐）
+      'bilinear'   trilinear interpolation + 1x1x1 conv
+      'nearest'    nearest interpolation + 1x1x1 conv
+      'transpose'  transposed convolution (dense)
+      'transposeS' depthwise-separable transposed convolution (sparse, recommended)
     """
     if mode == 'bilinear':
         layers = [nn.Upsample(scale_factor=up, mode='trilinear', align_corners=True),
@@ -501,15 +505,15 @@ def upsampleBlock(in_planes, out_planes, up=(1, 2, 2), mode='bilinear',
 
 
 # =============================================================================
-# 残差块
+# Residual block
 # =============================================================================
 
 class resBlock_pni(nn.Module):
-    """PNI 残差块（各向异性 EM 图像专用）
+    """PNI residual block (for anisotropic EM images)
 
-    结构:
-      block1: 1×3×3 conv+BN+ReLU  （维度对齐）
-      block2: 3×3×3 conv+BN+ReLU → 3×3×3 conv+BN  （残差两层）
+    Structure:
+      block1: 1x3x3 conv+BN+ReLU  (channel projection)
+      block2: 3x3x3 conv+BN+ReLU -> 3x3x3 conv+BN  (two residual layers)
       block3: BN
       block4: ReLU
     ref: https://github.com/torms3/Superhuman
@@ -538,31 +542,31 @@ class resBlock_pni(nn.Module):
 
 # =============================================================================
 # UNet_PNI_embedding_deep (PEA)
-# 论文: Pixel Embedded Affinity
-# 基于 Superhuman UNet，增加深层 embedding 监督（5 路输出）
+# Paper: Pixel Embedded Affinity
+# Based on the Superhuman UNet, with added deep embedding supervision (5 outputs)
 # =============================================================================
 
 @register_model("pea")
 class UNet_PNI_embedding_deep(nn.Module):
-    """5 层 UNet + PNI 残差块 + 深层 embedding 监督
+    """5-level UNet with PNI residual blocks and deep embedding supervision
 
-    输入: (B, 1, D, H, W)   推荐尺寸: (B, 1, 18, 160, 160)
-    输出: (emd1, emd2, emd3, emd4, embedding)
-      emd1  ← center 层投影 → emd 维
-      emd2  ← conv4（第 1 解码层）投影
-      emd3  ← conv5（第 2 解码层）投影
-      emd4  ← conv6（第 3 解码层）投影
-      embedding ← 最终输出投影
+    Input:  (B, 1, D, H, W)   recommended size: (B, 1, 18, 160, 160)
+    Output: (emd1, emd2, emd3, emd4, embedding)
+      emd1  <- projection of the center level -> emd dims
+      emd2  <- projection of conv4 (1st decoder level)
+      emd3  <- projection of conv5 (2nd decoder level)
+      emd4  <- projection of conv6 (3rd decoder level)
+      embedding <- projection of the final output
 
-    关键参数 (对应 ac3ac4.yaml → MODEL):
-        filters       : 各层通道数，默认 [28,36,48,64,80]
-        upsample_mode : 'bilinear' | 'transposeS' 等
-        merge_mode    : 'add'（相加跳接）| 'cat'（拼接跳接）
+    Key args (mapped from ac3ac4.yaml -> MODEL):
+        filters       : per-level channel counts, default [28,36,48,64,80]
+        upsample_mode : 'bilinear' | 'transposeS' | ...
+        merge_mode    : 'add' (additive skip) | 'cat' (concatenated skip)
         pad_mode      : 'zero' | 'replicate'
-        bn_mode       : 'async'（标准 BN）
+        bn_mode       : 'async' (standard BN)
         relu_mode     : 'elu' | 'relu' | 'leaky<slope>'
-        init_mode     : 'kaiming_normal' 等
-        emd           : embedding 投影维度，默认 16
+        init_mode     : 'kaiming_normal' | ...
+        emd           : embedding projection dimension, default 16
     """
     def __init__(self,
                  in_planes=1,
@@ -594,12 +598,12 @@ class UNet_PNI_embedding_deep(nn.Module):
         self.merge_mode = merge_mode
         self.emd = emd
 
-        # 输入嵌入：1×5×5（各向异性处理，z 方向不卷）
+        # Input embedding: 1x5x5 (anisotropic, no convolution along z)
         self.embed_in = conv3dBlock(
             [in_planes], [f[0]], [(1, 5, 5)], [1], [(0, 2, 2)],
             [True], [pad_mode], [''], [relu_mode], init_mode, bn_momentum)
 
-        # 编码器
+        # encoder
         self.conv0 = resBlock_pni(f[0], f[1], pad_mode, bn_mode, relu_mode, init_mode, bn_momentum)
         self.pool0 = nn.MaxPool3d((1, 2, 2), (1, 2, 2))
         self.conv1 = resBlock_pni(f[1], f[2], pad_mode, bn_mode, relu_mode, init_mode, bn_momentum)
@@ -609,22 +613,22 @@ class UNet_PNI_embedding_deep(nn.Module):
         self.conv3 = resBlock_pni(f[3], f[4], pad_mode, bn_mode, relu_mode, init_mode, bn_momentum)
         self.pool3 = nn.MaxPool3d((1, 2, 2), (1, 2, 2))
 
-        # 瓶颈
+        # bottleneck
         self.center = resBlock_pni(f[4], f[5], pad_mode, bn_mode, relu_mode, init_mode, bn_momentum)
 
-        # 解码器（4 层对称）
+        # decoder (4 symmetric levels)
         self.up0, self.cat0, self.conv4 = self._dec_block(f[5], f[4], upsample_mode, merge_mode, pad_mode, bn_mode, relu_mode, init_mode, bn_momentum)
         self.up1, self.cat1, self.conv5 = self._dec_block(f[4], f[3], upsample_mode, merge_mode, pad_mode, bn_mode, relu_mode, init_mode, bn_momentum)
         self.up2, self.cat2, self.conv6 = self._dec_block(f[3], f[2], upsample_mode, merge_mode, pad_mode, bn_mode, relu_mode, init_mode, bn_momentum)
         self.up3, self.cat3, self.conv7 = self._dec_block(f[2], f[1], upsample_mode, merge_mode, pad_mode, bn_mode, relu_mode, init_mode, bn_momentum)
 
-        # 输出嵌入：1×5×5
+        # Output embedding: 1x5x5
         self.embed_out = conv3dBlock(
             [f[0]], [f[0]], [(1, 5, 5)], [1], [(0, 2, 2)],
             [True], [pad_mode], [''], [relu_mode], init_mode, bn_momentum)
 
-        # 输出投影头：各层 → emd 维
-        self.out_put  = conv3dBlock([f[0]], [emd], [(1, 1, 1)], init_mode=init_mode)  # 最终 embedding
+        # Output projection heads: each level -> emd dims
+        self.out_put  = conv3dBlock([f[0]], [emd], [(1, 1, 1)], init_mode=init_mode)  # final embedding
         self.out_put1 = conv3dBlock([f[5]], [emd], [(1, 1, 1)], init_mode=init_mode)  # center
         self.out_put2 = conv3dBlock([f[4]], [emd], [(1, 1, 1)], init_mode=init_mode)  # conv4
         self.out_put3 = conv3dBlock([f[3]], [emd], [(1, 1, 1)], init_mode=init_mode)  # conv5
@@ -644,7 +648,7 @@ class UNet_PNI_embedding_deep(nn.Module):
         return cat_layer(torch.cat([up, skip], dim=1))
 
     def _forward_features(self, x):
-        """UNet 前向传播，返回 (emd1, emd2, emd3, emd4, embedding)"""
+        """UNet forward pass, returns (emd1, emd2, emd3, emd4, embedding)."""
         e   = self.embed_in(x)
         c0  = self.conv0(e)
         c1  = self.conv1(self.pool0(c0))
@@ -659,16 +663,16 @@ class UNet_PNI_embedding_deep(nn.Module):
 
         embed_out = self.embed_out(d3)
 
-        embedding = self.out_put(embed_out)   # 最终 embedding
-        emd1 = self.out_put1(ctr)             # center 层
-        emd2 = self.out_put2(d0)              # 第 1 解码层
-        emd3 = self.out_put3(d1)              # 第 2 解码层
-        emd4 = self.out_put4(d2)              # 第 3 解码层
+        embedding = self.out_put(embed_out)   # final embedding
+        emd1 = self.out_put1(ctr)             # center level
+        emd2 = self.out_put2(d0)              # 1st decoder level
+        emd3 = self.out_put3(d1)              # 2nd decoder level
+        emd4 = self.out_put4(d2)              # 3rd decoder level
 
         return emd1, emd2, emd3, emd4, embedding
 
     def _make_ema_input_torch(self, volume):
-        """GPU 端 EMA 输入生成：亮度扰动 + cutout + 随机翻转
+        """GPU-side EMA input generation: intensity jitter + cutout + random flip
 
         Args:
             volume: [B, 1, D, H, W] GPU tensor
@@ -679,7 +683,7 @@ class UNet_PNI_embedding_deep(nn.Module):
         B = volume.shape[0]
         ema = volume.clone()
 
-        # 1. 亮度扰动
+        # 1. intensity jitter
         ema = ema * (1 + 0.1 * (torch.rand(B, 1, 1, 1, 1, device=volume.device) * 2 - 1))
         ema = ema + 0.1 * (torch.rand(B, 1, 1, 1, 1, device=volume.device) * 2 - 1)
         ema = ema.clamp(0, 1)
@@ -698,7 +702,7 @@ class UNet_PNI_embedding_deep(nn.Module):
                 mask[:, mz:mz+sz, my:my+sxy, mx:mx+sxy] = 0
             ema[b] = ema[b] * mask
 
-        # 3. 随机翻转 + 记录 rules
+        # 3. random flip + record rules
         rules = torch.randint(0, 2, (B, 4), device=volume.device)
         for b in range(B):
             r = rules[b]
@@ -711,10 +715,11 @@ class UNet_PNI_embedding_deep(nn.Module):
 
     @staticmethod
     def _embedding_to_affinity(embedding):
-        """将 embedding 转换为 3 通道短程亲和力图（推理用）
+        """Convert an embedding into a 3-channel short-range affinity map (inference)
 
-        对 L2 归一化后的 embedding，沿 z/y/x 轴以 shift=1 计算余弦相似度。
-        返回: Tensor [B, 3, D, H, W]
+        Cosine similarity with shift=1 along the z/y/x axes of the L2-normalized
+        embedding.
+        Returns: Tensor [B, 3, D, H, W]
         """
         embedding = F.normalize(embedding, p=2, dim=1)
         B, C, D, H, W = embedding.shape
@@ -728,28 +733,29 @@ class UNet_PNI_embedding_deep(nn.Module):
         affs[:, 2:3, :, :, 1:] = torch.sum(
             embedding[:, :, :, :, 1:] * embedding[:, :, :, :, :W-1],
             dim=1, keepdim=True)
-        # 边界填充：将 shift 导致的零值边界用邻近值填充，避免推理时出现小孔洞
-        affs[:, 0:1, :1, :, :] = affs[:, 0:1, 1:2, :, :]   # z 边界
-        affs[:, 1:2, :, :1, :] = affs[:, 1:2, :, 1:2, :]   # y 边界
-        affs[:, 2:3, :, :, :1] = affs[:, 2:3, :, :, 1:2]   # x 边界
-        affs = F.relu(affs)                                   # 确保非负
+        # Boundary padding: fill the zero border left by the shift with neighbouring
+        # values to avoid small holes at inference time
+        affs[:, 0:1, :1, :, :] = affs[:, 0:1, 1:2, :, :]   # z border
+        affs[:, 1:2, :, :1, :] = affs[:, 1:2, :, 1:2, :]   # y border
+        affs[:, 2:3, :, :, :1] = affs[:, 2:3, :, :, 1:2]   # x border
+        affs = F.relu(affs)                                   # keep non-negative
         return affs
 
     def forward(self, inputs, target=None, weight=None, criterion=None):
-        """前向传播 + 损失计算（适配框架标准调用接口）
+        """Forward pass and loss computation (framework calling convention)
 
-        测试模式 (criterion=None):
-            return pred                     # Tensor [B, 12, D, H, W] 多尺度亲和力
+        Test mode (criterion=None):
+            return pred                     # Tensor [B, 12, D, H, W] multi-scale affinity
 
-        训练模式 (criterion!=None):
-            return pred, loss, losses_vis   # 与 return_loss 接口一致
+        Training mode (criterion!=None):
+            return pred, loss, losses_vis   # matches the return_loss interface
 
-        框架传入:
-            target: List[4 x Tensor[B,3,D,H,W]]  多尺度亲和力标签
-            weight: List[4 x List[1 x Tensor[B,3,D,H,W]]]  权重图
-            criterion: 框架 Criterion（忽略，内部使用 WeightedMSE）
+        Provided by the framework:
+            target: List[4 x Tensor[B,3,D,H,W]]  multi-scale affinity labels
+            weight: List[4 x List[1 x Tensor[B,3,D,H,W]]]  weight maps
+            criterion: framework Criterion (ignored, WeightedMSE is used internally)
         """
-        # ── 主路前向 ──
+        # ── main branch forward ──
         emd1, emd2, emd3, emd4, embedding = self._forward_features(inputs)
 
         if criterion is None:
@@ -757,24 +763,24 @@ class UNet_PNI_embedding_deep(nn.Module):
 
         _criterion = WeightedMSE()
 
-        # ── 解包 target/weight ──
+        # ── unpack target/weight ──
         # target: List[4 x Tensor[B,3,D,H,W]] → Tensor[B,12,D,H,W]
         aff_target = torch.cat([t.to(inputs.device) for t in target], dim=1)
         # weight: List[4 x List[1 x Tensor[B,3,D,H,W]]] → Tensor[B,12,D,H,W]
         aff_weight = torch.cat([w[0].to(inputs.device) for w in weight], dim=1)
 
-        # ── SCM: 12 通道多尺度亲和力损失（最终 embedding）──
+        # ── SCM: 12-channel multi-scale affinity loss (final embedding) ──
         loss_emb, affs_emb = embedding_loss_norm5(embedding, aff_target, aff_weight, _criterion)
 
-        # ── CCM: EMA 一致性损失 ──
+        # ── CCM: EMA consistency loss ──
         ema_volume, rules = self._make_ema_input_torch(inputs)
         _, _, _, _, ema_embedding = self._forward_features(ema_volume)
         ema_embedding = convert_consistency_flip(ema_embedding, rules)
         loss_cross, _ = ema_embedding_loss_norm5(
             embedding, ema_embedding, aff_target, aff_weight, _criterion)
 
-        # ── EPM: 多尺度中间层监督 ──
-        # 从 shift=1 的 target 和 weight 下采样生成 down1-4
+        # ── EPM: multi-scale deep supervision ──
+        # down1-4 are produced by downsampling the shift=1 target and weight
         short_target = target[0].to(inputs.device)   # [B,3,D,H,W]
         short_weight = weight[0][0].to(inputs.device) # [B,3,D,H,W]
         short_tw = torch.cat([short_target, short_weight], dim=1)  # [B,6,D,H,W]
@@ -789,7 +795,7 @@ class UNet_PNI_embedding_deep(nn.Module):
         loss_emd3, _ = embedding_loss_norm1(emd3, down2[:, :3], down2[:, 3:], _criterion)
         loss_emd4, _ = embedding_loss_norm1(emd4, down1[:, :3], down1[:, 3:], _criterion)
 
-        # ── 总损失 ──
+        # ── total loss ──
         loss = loss_emb + loss_cross + loss_emd1 + loss_emd2 + loss_emd3 + loss_emd4
 
         losses_vis = {
@@ -809,11 +815,11 @@ class UNet_PNI_embedding_deep(nn.Module):
 
 
 # =============================================================================
-# 快速测试
+# Smoke test
 # =============================================================================
 
 if __name__ == '__main__':
-    # ── 模型测试（推理模式）──
+    # ── model test (inference mode) ──
     x = torch.randn(1, 1, 18, 160, 160)
     model = UNet_PNI_embedding_deep(
         in_planes=1, out_planes=12,
@@ -822,11 +828,11 @@ if __name__ == '__main__':
     pred = model(x)
     print(f'pred (inference): {list(pred.shape)}')
 
-    # ── 训练模式测试（模拟框架调用）──
-    # 模拟 DataLoader 产出的 target 和 weight
+    # ── training mode test (simulated framework call) ──
+    # mimic the target and weight produced by the DataLoader
     target = [torch.randn(1, 3, 18, 160, 160) for _ in range(4)]
     weight = [[torch.ones(1, 3, 18, 160, 160)] for _ in range(4)]
-    criterion = WeightedMSE()  # 占位，forward 内部会用自己的
+    criterion = WeightedMSE()  # placeholder, forward uses its own criterion
 
     pred, loss, losses_vis = model(x, target=target, weight=weight, criterion=criterion)
     print(f'pred (train): {list(pred.shape)}')
@@ -835,7 +841,7 @@ if __name__ == '__main__':
     loss.backward()
     print('backward OK')
 
-    # ── EMA 输入测试 ──
+    # ── EMA input test ──
     imgs = np.random.rand(18, 160, 160).astype(np.float32)
     ema_imgs, rule = make_ema_input(imgs)
     print(f'ema_imgs: {ema_imgs.shape}, rule: {rule}')

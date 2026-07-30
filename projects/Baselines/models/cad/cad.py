@@ -1,21 +1,23 @@
 """
-cad.py — CAD (Co-detection of Affinities and Densities)
+cad.py -- CAD (Co-detection of Affinities and Densities)
 
-将 2D 双流 U-Net (CoDetectionCNN) 和 3D U-Net (UNet_PNI_embedding)
-封装为单个 nn.Module，适配 pytorch_connectomics 框架。
+Wraps the 2D two-stream U-Net (CoDetectionCNN) and the 3D U-Net
+(UNet_PNI_embedding) into a single nn.Module for the pytorch_connectomics
+framework.
 
-训练模式:
-  1. 3D 模型前向 → 12 通道多尺度亲和力损失 (embedding_loss_norm5)
-  2. 遍历 z 切片对:
-     - 2D 模型前向 → 2D slice loss
+Training mode:
+  1. 3D forward -> 12-channel multi-scale affinity loss (embedding_loss_norm5)
+  2. Loop over z slice pairs:
+     - 2D forward -> 2D slice loss
      - Cross-attention loss: 2D pred vs 3D pred
-     - Interaction loss: 2D emb · 3D emb (仅 z 方向)
-  3. 两阶段门控: iter < start_ft 只用 loss_3d + loss_2d_slice
+     - Interaction loss: 2D emb dot 3D emb (z direction only)
+  3. Two-stage gating: for iter < start_ft only loss_3d + loss_2d_slice is used
 
-推理模式:
-  仅使用 2D 模型，逐切片对处理，输出 [B, 3, D, H, W] 亲和力图
+Inference mode:
+  2D model only, processed slice pair by slice pair, producing a
+  [B, 3, D, H, W] affinity map
 
-来源: CAD/scripts_2_5d_3d/main_CAD.py
+Source: CAD/scripts_2_5d_3d/main_CAD.py
 """
 
 import torch
@@ -28,7 +30,7 @@ from .model_3d import UNet_PNI_embedding
 
 
 # =============================================================================
-# 损失函数
+# Loss functions
 # =============================================================================
 
 class WeightedMSE(nn.Module):
@@ -45,7 +47,7 @@ class WeightedMSE(nn.Module):
 
 
 def _single_offset_loss(embedding, order, shift, target, weightmap, criterion):
-    """计算一个 (方向, 偏移) 对的亲和力和损失（与 PEA 相同）"""
+    """Affinity and loss for one (direction, offset) pair (same as PEA)."""
     B, C, D, H, W = embedding.shape
     ax = order % 3
     if ax == 0:
@@ -68,7 +70,7 @@ def _single_offset_loss(embedding, order, shift, target, weightmap, criterion):
 
 def embedding_loss_norm5(embedding, target, weightmap, criterion,
                          affs0_weight=1, shift=1, fill=True):
-    """12 通道多尺度亲和力损失（与 PEA 的 SCM 相同）"""
+    """12-channel multi-scale affinity loss (same as PEA's SCM)."""
     embedding = F.normalize(embedding, p=2, dim=1)
     shifts = [1, 1, 1, 2, 3, 3, 3, 9, 9, 4, 27, 27]
     affs = torch.zeros_like(target)
@@ -88,7 +90,7 @@ def embedding_loss_norm5(embedding, target, weightmap, criterion,
 
 def embedding_loss_norm_trunc(embedding1, embedding2, target, weightmap,
                                criterion, affs0_weight=1, shift=1):
-    """2D embedding → 3 通道亲和力 (trunc 模式: L2 归一化, 点积, clamp [0,1])"""
+    """2D embedding -> 3-channel affinity (trunc mode: L2 normalize, dot product, clamp to [0,1])."""
     embedding1 = F.normalize(embedding1, p=2, dim=1)
     embedding2 = F.normalize(embedding2, p=2, dim=1)
     H, W = embedding2.shape[2], embedding2.shape[3]
@@ -115,22 +117,22 @@ def embedding_loss_norm_trunc(embedding1, embedding2, target, weightmap,
 
 
 # =============================================================================
-# CAD 主模型
+# CAD main model
 # =============================================================================
 
 @register_model("cad")
 class CAD(CfgMixin, nn.Module):
     """Co-detection of Affinities and Densities
 
-    参数 (通过 CfgMixin.parse_config 从 cfg 传入):
-        filters:             3D U-Net 各层通道数
-        emd:                 embedding 维度
-        filter_channel_2d:   2D U-Net 基础滤波器数
-        start_ft:            开始联合微调的迭代数
-        ft_lr_ratio:         3D 模型学习率系数
-        affs0_weight_3d:     3D 短程亲和力权重
-        affs0_weight_2d:     2D 短程亲和力权重
-        w_3d/w_2d_slice/w_cross/w_interact: 各损失项权重
+    Args (passed from cfg via CfgMixin.parse_config):
+        filters:             per-level channel counts of the 3D U-Net
+        emd:                 embedding dimension
+        filter_channel_2d:   base filter count of the 2D U-Net
+        start_ft:            iteration at which joint fine-tuning starts
+        ft_lr_ratio:         learning-rate scale for the 3D model
+        affs0_weight_3d:     weight of the 3D short-range affinity
+        affs0_weight_2d:     weight of the 2D short-range affinity
+        w_3d/w_2d_slice/w_cross/w_interact: weights of the individual loss terms
     """
 
     @staticmethod
@@ -188,18 +190,18 @@ class CAD(CfgMixin, nn.Module):
         self._iteration.fill_(val)
 
     def get_param_groups(self):
-        """返回 2D / 3D 分别的参数组，供 _build_optimizer 使用"""
+        """Separate 2D / 3D parameter groups, consumed by _build_optimizer."""
         return [
             {'params': list(self.model_2d.parameters()), 'lr_ratio': 1.0},
             {'params': list(self.model_3d.parameters()), 'lr_ratio': self.ft_lr_ratio},
         ]
 
     # -----------------------------------------------------------------
-    # 推理
+    # Inference
     # -----------------------------------------------------------------
     @staticmethod
     def _embedding_to_affinity_3ch(embeddings):
-        """将 [B, E, D, H, W] 的 embedding 转成 [B, 3, D, H, W] 短程亲和力"""
+        """Convert a [B, E, D, H, W] embedding into [B, 3, D, H, W] short-range affinities."""
         embeddings = F.normalize(embeddings, p=2, dim=1)
         B, C, D, H, W = embeddings.shape
         affs = torch.zeros(B, 3, D, H, W, device=embeddings.device)
@@ -212,7 +214,7 @@ class CAD(CfgMixin, nn.Module):
         affs[:, 2:3, :, :, 1:] = torch.sum(
             embeddings[:, :, :, :, 1:] * embeddings[:, :, :, :, :W-1],
             dim=1, keepdim=True)
-        # 边界填充 + ReLU
+        # boundary padding + ReLU
         affs[:, 0:1, :1, :, :] = affs[:, 0:1, 1:2, :, :]
         affs[:, 1:2, :, :1, :] = affs[:, 1:2, :, 1:2, :]
         affs[:, 2:3, :, :, :1] = affs[:, 2:3, :, :, 1:2]
@@ -220,7 +222,7 @@ class CAD(CfgMixin, nn.Module):
         return affs
 
     def _forward_inference(self, volume):
-        """推理: 用 2D 模型逐切片对处理，组装成 3D 亲和力图
+        """Inference: run the 2D model over slice pairs and assemble a 3D affinity map.
 
         Args:
             volume: [B, 1, D, H, W]
@@ -243,15 +245,15 @@ class CAD(CfgMixin, nn.Module):
         return self._embedding_to_affinity_3ch(embeddings)
 
     # -----------------------------------------------------------------
-    # 训练
+    # Training
     # -----------------------------------------------------------------
     def _forward_train(self, volume, target, weight):
-        """完整 CAD 训练前向传播
+        """Full CAD training forward pass
 
         Args:
             volume: [B, 1, D, H, W]
-            target: List[4 x Tensor[B,3,D,H,W]]  多尺度亲和力标签
-            weight: List[4 x List[1 x Tensor[B,3,D,H,W]]]  权重
+            target: List[4 x Tensor[B,3,D,H,W]]  multi-scale affinity labels
+            weight: List[4 x List[1 x Tensor[B,3,D,H,W]]]  weights
         Returns:
             (pred_3d, total_loss, losses_vis)
         """
@@ -259,8 +261,8 @@ class CAD(CfgMixin, nn.Module):
         B, _, D, H, W = volume.shape
         _criterion = WeightedMSE()
 
-        # ── 3D 损失 ──
-        # 拼接多尺度 target/weight
+        # ── 3D loss ──
+        # concatenate the multi-scale target/weight
         aff_target = torch.cat([t.to(device) for t in target], dim=1)  # [B,12,D,H,W]
         aff_weight = torch.cat([w[0].to(device) for w in weight], dim=1)
 
@@ -269,7 +271,7 @@ class CAD(CfgMixin, nn.Module):
             embedding_3d, aff_target, aff_weight, _criterion,
             affs0_weight=self.affs0_weight_3d)
 
-        # 3D pred 边界填充 (前 3 通道)
+        # boundary padding of the 3D pred (first 3 channels)
         shift = 1
         pred_3d = pred_3d_12ch[:, :3].clone()
         pred_3d[:, 1, :, :shift, :] = pred_3d[:, 1, :, shift:shift*2, :]
@@ -277,18 +279,18 @@ class CAD(CfgMixin, nn.Module):
         pred_3d[:, 0, :shift, :, :] = pred_3d[:, 0, shift:shift*2, :, :]
         pred_3d = F.relu(pred_3d)
 
-        # scale-0 target/weight (3 通道短程)
+        # scale-0 target/weight (3 short-range channels)
         target_s0 = target[0].to(device)      # [B, 3, D, H, W]
         weight_s0 = weight[0][0].to(device)   # [B, 3, D, H, W]
 
-        # ── 2D 切片循环 ──
+        # ── 2D slice loop ──
         loss_2d_slice = torch.tensor(0.0, device=device)
         loss_cross = torch.tensor(0.0, device=device)
         loss_interaction = torch.tensor(0.0, device=device)
 
         phase2 = (self.iteration >= self.start_ft)
 
-        # 决定 3D embedding 是否 detach
+        # whether the 3D embedding is detached
         embedding_3d_for_interact = embedding_3d if phase2 else embedding_3d.detach()
 
         for z in range(D - 1):
@@ -318,13 +320,13 @@ class CAD(CfgMixin, nn.Module):
                     weight_z[:, :, shift:, :])
             loss_cross = loss_cross + loss_cross_tmp
 
-            # Interaction loss (仅 z 方向)
+            # Interaction loss (z direction only)
             shifts_12ch = [1, 1, 1, 2, 3, 3, 3, 9, 9, 4, 27, 27]
             loss_3d_tmp = torch.tensor(0.0, device=device)
             for order, sh in enumerate(shifts_12ch):
-                if order % 3 != 0:          # 只处理 z 方向
+                if order % 3 != 0:          # z direction only
                     continue
-                if z + sh > D - 2:          # 越界检查
+                if z + sh > D - 2:          # bounds check
                     continue
                 emb2_2d_norm = F.normalize(emb2_2d, p=2, dim=1)
                 if sh == 1:
@@ -360,7 +362,7 @@ class CAD(CfgMixin, nn.Module):
                     loss_3d_tmp = loss_t1 + loss_t2
             loss_interaction = loss_interaction + loss_3d_tmp
 
-        # ── 损失组合 ──
+        # ── loss combination ──
         loss_3d_w = self.w_3d * loss_3d
         loss_2d_w = self.w_2d_slice * loss_2d_slice
         loss_cross_w = self.w_cross * loss_cross
@@ -384,12 +386,12 @@ class CAD(CfgMixin, nn.Module):
         return pred_3d, total_loss, losses_vis
 
     # -----------------------------------------------------------------
-    # forward 入口
+    # forward entry point
     # -----------------------------------------------------------------
     def forward(self, inputs, target=None, weight=None, criterion=None):
         """
-        推理 (criterion=None): return pred [B, 3, D, H, W]
-        训练 (criterion!=None): return (pred, loss, losses_vis)
+        Inference (criterion=None): return pred [B, 3, D, H, W]
+        Training (criterion!=None): return (pred, loss, losses_vis)
         """
         if criterion is None:
             return self._forward_inference(inputs)

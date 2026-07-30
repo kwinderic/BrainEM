@@ -1,2 +1,0 @@
-from .affinity_knet_maskformer import AffinityKNetMaskFormer
-from .affinity_knet_maskformer_onlylearn import AffinityKNetMaskFormerOnlyLearn
